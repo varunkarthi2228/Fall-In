@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Fall In - Where Hearts Meet After Lectures{% endblock %}</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'baby-pink': '#fdf2f8',
+                        'soft-pink': '#fce7f3',
+                        'medium-pink': '#f9a8d4',
+                        'bright-pink': '#ec4899',
+                        'dark-pink': '#be185d',
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#ec4899">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Fall In">
+    
+    <!-- Custom Styles -->
+    <style>
+        * {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #fdf2f8 0%, #fce7f3 50%, #fbcfe8 100%);
+            min-height: 100vh;
+        }
+        
+        /* Animations */
+        @keyframes heartbeat {
+            0%, 100% { transform: scale(1); }
+            25% { transform: scale(1.1); }
+            50% { transform: scale(1); }
+            75% { transform: scale(1.05); }
+        }
+        .heartbeat {
+            animation: heartbeat 2s ease-in-out infinite;
+        }
+        
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .slide-up {
+            animation: slideUp 0.5s ease-out;
+        }
+        
+        @keyframes slideInRight {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        /* Navigation styling */
+        .nav-bar {
+            background: rgba(253, 242, 248, 0.95);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(244, 114, 182, 0.1);
+        }
+        
+        .nav-icon {
+            color: #be185d;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+        
+        .nav-icon:hover {
+            color: #ec4899;
+            transform: scale(1.1);
+        }
+        
+        .nav-icon.active {
+            color: #ec4899;
+        }
+        
+        .nav-icon.active::after {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 6px;
+            height: 6px;
+            background: #ec4899;
+            border-radius: 50%;
+        }
+        
+        .logo {
+            background: linear-gradient(135deg, #ec4899, #be185d);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        /* Button styles */
+        .btn-primary {
+            background: linear-gradient(135deg, #ec4899, #be185d);
+            transition: all 0.3s ease;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(236, 72, 153, 0.3);
+        }
+        
+        /* Form styles */
+        .form-input:focus {
+            ring-color: #ec4899 !important;
+            border-color: #ec4899 !important;
+        }
+        
+        /* Flash message animations */
+        .flash-message {
+            animation: slideInRight 0.3s ease-out;
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: rgba(253, 242, 248, 0.3);
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: rgba(236, 72, 153, 0.3);
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(236, 72, 153, 0.5);
+        }
+        
+        /* Glass effect */
+        .glass {
+            background: rgba(253, 242, 248, 0.8);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(244, 114, 182, 0.1);
+        }
+        
+        /* Gradient text */
+        .gradient-text {
+            background: linear-gradient(135deg, #ec4899, #be185d);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 640px) {
+            .nav-bar {
+                padding: 12px 16px;
+            }
+            
+            .nav-icon {
+                font-size: 1.2rem;
+            }
+            
+            .logo {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <!-- Navigation -->
+    {% if session.user_id %}
+    <nav class="nav-bar fixed top-0 w-full z-50">
+        <div class="max-w-md mx-auto px-6 py-4 flex justify-between items-center">
+            <div class="logo text-2xl font-bold flex items-center">
+                <i class="fas fa-heart mr-2 heartbeat"></i> Fall In
+            </div>
+            <div class="flex space-x-8">
+                <a href="{{ url_for('dashboard') }}" class="nav-icon {% if request.endpoint == 'dashboard' %}active{% endif %}">
+                    <i class="fas fa-home text-xl"></i>
+                    <span class="sr-only">Home</span>
+                </a>
+                <a href="{{ url_for('notifications') }}" class="nav-icon {% if request.endpoint == 'notifications' %}active{% endif %}">
+                    <i class="fas fa-bell text-xl"></i>
+                    <span class="sr-only">Notifications</span>
+                    <!-- Notification badge -->
+                    <div class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center" id="notification-badge" style="display: none;">
+                        <span id="notification-count">0</span>
+                    </div>
+                </a>
+                <a href="{{ url_for('chats') }}" class="nav-icon {% if request.endpoint == 'chats' %}active{% endif %}">
+                    <i class="fas fa-comments text-xl"></i>
+                    <span class="sr-only">Chats</span>
+                </a>
+                <a href="{{ url_for('matches') }}" class="nav-icon {% if request.endpoint == 'matches' %}active{% endif %}">
+                    <i class="fas fa-heart text-xl"></i>
+                    <span class="sr-only">Matches</span>
+                </a>
+                <a href="{{ url_for('profile') }}" class="nav-icon {% if request.endpoint == 'profile' %}active{% endif %}">
+                    <i class="fas fa-user text-xl"></i>
+                    <span class="sr-only">Profile</span>
+                </a>
+            </div>
+        </div>
+    </nav>
+    <div class="h-20"></div> <!-- Spacer for fixed nav -->
+    {% endif %}
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="fixed top-24 right-4 z-50 space-y-2" id="flash-messages">
+                {% for category, message in messages %}
+                    <div class="flash-message max-w-sm p-4 rounded-xl shadow-lg {{ 'bg-green-500 text-white' if category == 'success' else 'bg-red-500 text-white' if category == 'error' else 'bg-yellow-500 text-black' if category == 'warning' else 'bg-blue-500 text-white' }}">
+                        <div class="flex items-center space-x-3">
+                            <i class="fas {{ 'fa-check-circle' if category == 'success' else 'fa-exclamation-circle' if category == 'error' else 'fa-exclamation-triangle' if category == 'warning' else 'fa-info-circle' }}"></i>
+                            <span class="flex-1">{{ message }}</span>
+                            <button onclick="this.closest('.flash-message').style.transform = 'translateX(100%)'; setTimeout(() => this.closest('.flash-message').remove(), 300);" class="text-current hover:text-gray-200 transition-colors">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- Main Content -->
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-gradient-to-r from-pink-500 to-red-500 text-white py-4 mt-8">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center">
+                <p class="text-white font-medium text-sm">
+                    © 2025 Fall In | Made with ❤️ for VIT
+                </p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Global utility functions
+        function hapticFeedback(type = 'light') {
+            if (navigator.vibrate) {
+                const patterns = { 
+                    light: 10, 
+                    medium: 50, 
+                    heavy: [50, 30, 50] 
+                };
+                navigator.vibrate(patterns[type] || 50);
+            }
+        }
+        
+        function showToast(message, type = 'info', duration = 3000) {
+            const colors = {
+                success: 'bg-green-500 text-white',
+                error: 'bg-red-500 text-white',
+                warning: 'bg-yellow-500 text-black',
+                info: 'bg-blue-500 text-white'
+            };
+            
+            const toast = document.createElement('div');
+            toast.className = `fixed top-24 right-4 z-50 max-w-sm p-4 rounded-xl shadow-lg ${colors[type]} slide-up`;
+            toast.innerHTML = `
+                <div class="flex items-center space-x-2">
+                    <span>${message}</span>
+                    <button onclick="this.closest('.fixed').remove()" class="ml-2 hover:opacity-75">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            `;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.transform = 'translateX(100%)';
+                setTimeout(() => toast.remove(), 300);
+            }, duration);
+        }
+        
+        // Form validation helper
+        function validateEmail(email) {
+            const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return re.test(email) && email.endsWith('.edu');
+        }
+        
+        // Loading state helper
+        function setLoadingState(element, loading = true) {
+            if (loading) {
+                element.dataset.originalText = element.innerHTML;
+                element.innerHTML = `
+                    <svg class="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Loading...
+                `;
+                element.disabled = true;
+            } else {
+                element.innerHTML = element.dataset.originalText || element.innerHTML;
+                element.disabled = false;
+            }
+        }
+        
+        // Network status handling
+        window.addEventListener('online', () => showToast('Back online! 🎉', 'success'));
+        window.addEventListener('offline', () => showToast('You\'re offline. Some features may not work.', 'warning', 5000));
+        
+        // Auto-hide flash messages
+        document.addEventListener('DOMContentLoaded', () => {
+            const flashMessages = document.querySelectorAll('.flash-message');
+            flashMessages.forEach((message, index) => {
+                setTimeout(() => {
+                    message.style.transform = 'translateX(100%)';
+                    setTimeout(() => message.remove(), 300);
+                }, 5000 + (index * 200));
+            });
+            
+            // Add entrance animations
+            const elements = document.querySelectorAll('[data-animate]');
+            elements.forEach((el, index) => {
+                el.style.opacity = '0';
+                el.style.transform = 'translateY(20px)';
+                setTimeout(() => {
+                    el.style.transition = 'all 0.6s ease';
+                    el.style.opacity = '1';
+                    el.style.transform = 'translateY(0)';
+                }, index * 100 + 200);
+            });
+        });
+    </script>
+</body>
+</html>

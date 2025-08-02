@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="background: linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%); min-height: 100vh;" class="py-4">
+    <div class="max-w-md mx-auto px-4">
+        <div class="flex justify-between items-center mb-6 slide-up">
+            <h1 class="text-2xl font-bold" style="color: #be185d;">Your Profile</h1>
+            <a href="{{ url_for('logout') }}" class="hover:text-red-600" style="color: #ec4899;">
+                <i class="fas fa-sign-out-alt text-xl"></i>
+            </a>
+        </div>
+        
+        <div class="bg-white rounded-2xl shadow-lg overflow-hidden mb-6 slide-up">
+            <div class="h-64 flex items-center justify-center" style="background: linear-gradient(135deg, #f9a8d4, #ec4899);">
+                {% if user.profile_photo %}
+                    <img src="{{ url_for('static', filename='uploads/' + user.profile_photo) }}" 
+                         alt="{{ user.name }}" class="w-full h-full object-cover">
+                {% else %}
+                    <div class="text-center text-white">
+                        <i class="fas fa-user text-6xl mb-4 opacity-50"></i>
+                        <p class="text-lg font-semibold">Add Your Photo</p>
+                    </div>
+                {% endif %}
+            </div>
+            
+            <div class="p-6">
+                <div class="mb-4">
+                    <h3 class="text-xl font-bold" style="color: #be185d;">{{ user.name if user.name else 'Your Name' }}, {{ user.age if user.age else '20' }}</h3>
+                    <p class="text-gray-600">{{ user.department if user.department else 'Your Department' }} • {{ user.year if user.year else 'Your Year' }}</p>
+                    <p class="text-sm font-medium" style="color: #ec4899;">{{ user.looking_for|title if user.looking_for else 'Looking for connections' }}</p>
+                </div>
+                
+                {% if user.bio %}
+                <div class="mb-4">
+                    <h4 class="font-semibold mb-2" style="color: #be185d;">About Me</h4>
+                    <p class="text-gray-700">{{ user.bio }}</p>
+                </div>
+                {% endif %}
+                
+                {% if prompts %}
+                <div class="mb-4">
+                    <h4 class="font-semibold mb-3" style="color: #be185d;">My Prompts</h4>
+                    <div class="space-y-2">
+                        {% for prompt in prompts %}
+                        <div class="rounded-lg p-3" style="background: rgba(252, 231, 243, 0.5);">
+                            <p class="text-sm font-medium" style="color: #be185d;">{{ prompt.prompt_question }}</p>
+                            <p class="text-gray-800">{{ prompt.prompt_answer }}</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="space-y-3 slide-up">
+            <button class="w-full text-white py-3 rounded-xl font-semibold" style="background: linear-gradient(135deg, #ec4899, #be185d);">
+                Edit Profile
+            </button>
+            <a href="{{ url_for('dashboard') }}" class="block w-full bg-white text-center py-3 rounded-xl font-semibold hover:bg-pink-50 transition-colors" style="color: #be185d; border: 1px solid #f9a8d4;">
+                Back to Discover
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
