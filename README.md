@@ -1,6 +1,23 @@
-# Fall In - University Dating App
+# 💕 Fall In - University Dating App
 
-A Flask-based dating application designed for university students to connect with each other on campus.
+[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://python.org)
+[![Flask](https://img.shields.io/badge/Flask-2.3.3-green.svg)](https://flask.palletsprojects.com)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.0+-38B2AC.svg)](https://tailwindcss.com)
+[![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E.svg)](https://supabase.com)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+A modern Flask-based dating application designed for university students to connect with each other on campus. Features real-time chat, swipe-based matching, and secure authentication.
+
+## ✨ Features
+
+- 🔐 **Email-based authentication** with OTP verification
+- 👤 **User profile creation** with photos and prompts
+- 💕 **Swipe-based matching system** like Tinder
+- 💬 **Real-time chat functionality** with matches
+- 📱 **Responsive design** with Tailwind CSS
+- 🎨 **Modern UI** with Font Awesome icons
+- 🗄️ **Database storage** for images (base64)
+- 🔒 **Secure data handling** with Supabase
 
 ## Features
 
@@ -11,17 +28,18 @@ A Flask-based dating application designed for university students to connect wit
 - 📱 Responsive design with Tailwind CSS
 - 🎨 Modern UI with Font Awesome icons
 
-## Setup Instructions
+## 🚀 Quick Start
 
 ### Prerequisites
 - Python 3.8 or higher
 - pip (Python package installer)
 
-### Installation
+### Local Development
 
-1. **Clone or download the project**
+1. **Clone the repository**
    ```bash
-   cd fall_in
+   git clone https://github.com/YOUR_USERNAME/fall-in.git
+   cd fall-in
    ```
 
 2. **Create and activate virtual environment**
@@ -37,12 +55,18 @@ A Flask-based dating application designed for university students to connect wit
    pip install -r requirements.txt
    ```
 
-4. **Run the application**
+4. **Set up environment variables**
+   ```bash
+   cp env_template.txt .env
+   # Edit .env with your Supabase credentials
+   ```
+
+5. **Run the application**
    ```bash
    python app.py
    ```
 
-5. **Access the application**
+6. **Access the application**
    - Main app: http://localhost:8000
    - Debug page: http://localhost:8000/debug
 
