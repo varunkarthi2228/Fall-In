@@ -53,7 +53,12 @@
         .heartbeat {
             animation: heartbeat 2s ease-in-out infinite;
         }
-        
+        .nav-bar {
+    transition: transform 0.4s cubic-bezier(.4,0,.2,1);
+}
+.navbar-hidden {
+    transform: translateY(-100%);
+}
         @keyframes slideUp {
             from {
                 opacity: 0;
@@ -95,6 +100,56 @@
         .nav-icon:hover {
             color: #ec4899;
             transform: scale(1.1);
+        }
+        
+        .nav-icon.active {
+            color: #ec4899;
+        }
+
+                /* Responsive design improvements - More compact on desktop */
+        @media (min-width: 768px) {
+            .nav-bar {
+                padding: 0.75rem 1.5rem;
+            }
+            
+            .nav-icon {
+                font-size: 1.1rem;
+                padding: 0.4rem;
+            }
+            
+            .nav-icon i {
+                font-size: 1.3rem;
+            }
+        }
+
+        @media (min-width: 1024px) {
+            .nav-bar {
+                padding: 1rem 2rem;
+            }
+            
+            .nav-icon {
+                font-size: 1.25rem;
+                padding: 0.5rem;
+            }
+            
+            .nav-icon i {
+                font-size: 1.5rem;
+            }
+        }
+
+        @media (min-width: 1280px) {
+            .nav-bar {
+                padding: 1.25rem 2.5rem;
+            }
+            
+            .nav-icon {
+                font-size: 1.4rem;
+                padding: 0.6rem;
+            }
+            
+            .nav-icon i {
+                font-size: 1.7rem;
+            }
         }
         
         .nav-icon.active {
@@ -219,6 +274,10 @@
                     <i class="fas fa-heart text-xl"></i>
                     <span class="sr-only">Matches</span>
                 </a>
+                <a href="{{ url_for('confessions') }}" class="nav-icon {% if request.endpoint == 'confessions' %}active{% endif %}">
+                    <i class="fas fa-comment-dots text-xl"></i>
+                    <span class="sr-only">Confessions</span>
+                </a>
                 <a href="{{ url_for('profile') }}" class="nav-icon {% if request.endpoint == 'profile' %}active{% endif %}">
                     <i class="fas fa-user text-xl"></i>
                     <span class="sr-only">Profile</span>
@@ -265,6 +324,53 @@
     </footer>
 
     <script>
+       
+(function() {
+    const navbar = document.querySelector('.nav-bar');
+    if (!navbar) return;
+
+    let hideTimeout;
+    let lastScrollY = window.scrollY;
+
+    function showNavbar() {
+        navbar.classList.remove('navbar-hidden');
+        clearTimeout(hideTimeout);
+        hideTimeout = setTimeout(hideNavbar, 5000);
+    }
+
+    function hideNavbar() {
+        navbar.classList.add('navbar-hidden');
+    }
+
+    // Show on scroll up or down
+    window.addEventListener('scroll', () => {
+        showNavbar();
+        lastScrollY = window.scrollY;
+    });
+
+    // Show on mouse move near top (for accessibility)
+    document.addEventListener('mousemove', (e) => {
+        if (e.clientY < 80) showNavbar();
+    });
+
+    // Show on focus (keyboard navigation)
+    navbar.addEventListener('focusin', showNavbar);
+
+    // Initial auto-hide after 5s
+    hideTimeout = setTimeout(hideNavbar, 5000);
+
+    // Optionally, show on touchstart for mobile
+    document.addEventListener('touchstart', (e) => {
+        if (e.touches[0].clientY < 80) showNavbar();
+    });
+})();
+
+
+
+
+
+
+
         // Global utility functions
         function hapticFeedback(type = 'light') {
             if (navigator.vibrate) {
@@ -298,10 +404,40 @@
             document.body.appendChild(toast);
             
             setTimeout(() => {
-                toast.style.transform = 'translateX(100%)';
-                setTimeout(() => toast.remove(), 300);
+                if (toast.parentNode) {
+                    toast.style.transform = 'translateX(100%)';
+                    setTimeout(() => toast.remove(), 300);
+                }
             }, duration);
         }
+        
+        // Update notification count
+        function updateNotificationCount() {
+            fetch('/notification-count')
+                .then(response => response.json())
+                .then(data => {
+                    const badge = document.getElementById('notification-badge');
+                    const count = document.getElementById('notification-count');
+                    
+                    if (data.count > 0) {
+                        count.textContent = data.count;
+                        badge.style.display = 'flex';
+                    } else {
+                        badge.style.display = 'none';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching notification count:', error);
+                });
+        }
+        
+        // Update notification count on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            updateNotificationCount();
+            
+            // Update notification count every 30 seconds
+            setInterval(updateNotificationCount, 30000);
+        });
         
         // Form validation helper
         function validateEmail(email) {

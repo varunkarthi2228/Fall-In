@@ -762,44 +762,48 @@ def like_user(user_id):
         # Like might already exist, that's okay
         pass
     
-    # Check if it's a match
-    existing_like_result = supabase.table('likes').select('*').eq('liker_id', user_id).eq('liked_id', liker_id).execute()
-    
-    if existing_like_result.data:
-        # It's a match!
-        user1_id = min(liker_id, user_id)
-        user2_id = max(liker_id, user_id)
+            # Check if it's a match
+        existing_like_result = supabase.table('likes').select('*').eq('liker_id', user_id).eq('liked_id', liker_id).execute()
         
-        try:
-            supabase.table('matches').insert({'user1_id': user1_id, 'user2_id': user2_id}).execute()
+        if existing_like_result.data:
+            # It's a match!
+            user1_id = min(liker_id, user_id)
+            user2_id = max(liker_id, user_id)
             
-            # Get both users' names for notifications
-            user1_result = supabase.table('users').select('name').eq('id', user1_id).execute()
-            user2_result = supabase.table('users').select('name').eq('id', user2_id).execute()
-            
-            user1_name = user1_result.data[0]['name'] if user1_result.data else 'Someone'
-            user2_name = user2_result.data[0]['name'] if user2_result.data else 'Someone'
-            
-            # Create match notifications for both users
-            supabase.table('notifications').insert([
-                {
-                    'user_id': user1_id,
-                    'from_user_id': user2_id,
-                    'type': 'match',
-                    'message': f'It\'s a match with {user2_name}! 💖'
-                },
-                {
-                    'user_id': user2_id,
-                    'from_user_id': user1_id,
-                    'type': 'match',
-                    'message': f'It\'s a match with {user1_name}! 💖'
-                }
-            ]).execute()
-            
-            flash('It\'s a match! 💖', 'success')
-        except Exception as e:
-            # Match might already exist, that's okay
-            pass
+            try:
+                supabase.table('matches').insert({'user1_id': user1_id, 'user2_id': user2_id}).execute()
+                
+                # Get both users' names for notifications
+                user1_result = supabase.table('users').select('name').eq('id', user1_id).execute()
+                user2_result = supabase.table('users').select('name').eq('id', user2_id).execute()
+                
+                user1_name = user1_result.data[0]['name'] if user1_result.data else 'Someone'
+                user2_name = user2_result.data[0]['name'] if user2_result.data else 'Someone'
+                
+                # Delete older notifications between these users to avoid duplicates
+                supabase.table('notifications').delete().eq('user_id', user1_id).eq('from_user_id', user2_id).execute()
+                supabase.table('notifications').delete().eq('user_id', user2_id).eq('from_user_id', user1_id).execute()
+                
+                # Create match notifications for both users
+                supabase.table('notifications').insert([
+                    {
+                        'user_id': user1_id,
+                        'from_user_id': user2_id,
+                        'type': 'match',
+                        'message': f'It\'s a match with {user2_name}! 💖'
+                    },
+                    {
+                        'user_id': user2_id,
+                        'from_user_id': user1_id,
+                        'type': 'match',
+                        'message': f'It\'s a match with {user1_name}! 💖'
+                    }
+                ]).execute()
+                
+                flash('It\'s a match! 💖', 'success')
+            except Exception as e:
+                # Match might already exist, that's okay
+                pass
     
     return redirect(url_for('dashboard'))
 
@@ -1149,6 +1153,19 @@ def edit_profile():
     {% endblock %}
     ''', user=user, prompts=prompts)
 
+@app.route('/notification-count')
+def notification_count():
+    if 'user_id' not in session:
+        return jsonify({'count': 0})
+    
+    user_id = session['user_id']
+    
+    # Get unread notification count
+    notifications_result = supabase.table('notifications').select('id').eq('user_id', user_id).eq('is_read', False).execute()
+    
+    count = len(notifications_result.data)
+    return jsonify({'count': count})
+
 @app.route('/logout')
 def logout():
     session.clear()
@@ -1182,6 +1199,9 @@ def notifications():
     
     # Get notifications
     notifications_result = supabase.table('notifications').select('*, users!notifications_from_user_id_fkey(*)').eq('user_id', user_id).order('created_at', desc=True).limit(10).execute()
+    
+    # Mark notifications as read
+    supabase.table('notifications').update({'is_read': True}).eq('user_id', user_id).eq('is_read', False).execute()
     
     notifications = []
     for notification in notifications_result.data:
@@ -1428,6 +1448,10 @@ def accept_chat_request(request_id):
             requester_name = requester_result.data[0]['name'] if requester_result.data else 'Someone'
             receiver_name = receiver_result.data[0]['name'] if receiver_result.data else 'Someone'
             
+            # Delete older notifications between these users to avoid duplicates
+            supabase.table('notifications').delete().eq('user_id', request_info['requester_id']).eq('from_user_id', request_info['receiver_id']).execute()
+            supabase.table('notifications').delete().eq('user_id', request_info['receiver_id']).eq('from_user_id', request_info['requester_id']).execute()
+            
             # Create notification for the requester
             supabase.table('notifications').insert({
                 'user_id': request_info['requester_id'],
@@ -1530,40 +1554,336 @@ def chat(user_id):
     return render_template_string('''
     {% extends "base.html" %}
     {% block content %}
-    <div class="bg-gray-50 min-h-screen flex flex-col">
-        <!-- Chat Header -->
-        <div class="bg-white border-b border-gray-200 px-4 py-3">
-            <div class="flex items-center space-x-3">
-                <a href="{{ url_for('notifications') }}" class="text-gray-600 hover:text-gray-800">
-                    <i class="fas fa-arrow-left text-xl"></i>
+    <style>
+        /* Hide the main navbar in chat view */
+        .navbar {
+            display: none !important;
+        }
+        
+        /* Chat-specific styles */
+        .chat-container {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .chat-header {
+            background: linear-gradient(135deg, #fdf2f8, #fce7f3);
+            border-bottom: 1px solid rgba(244, 114, 182, 0.2);
+            padding: 1rem;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
+        .chat-header-content {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .back-button {
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            backdrop-filter: blur(10px);
+        }
+        
+        .back-button:hover {
+            background: rgba(255, 255, 255, 0.9);
+            transform: scale(1.05);
+        }
+        
+        .user-info {
+            flex: 1;
+            text-align: center;
+        }
+        
+        .user-name {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #1f2937;
+            margin-bottom: 0.25rem;
+        }
+        
+        .user-details {
+            font-size: 0.875rem;
+            color: #6b7280;
+        }
+        
+        .profile-image {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid rgba(255, 255, 255, 0.8);
+            box-shadow: 0 4px 12px rgba(244, 114, 182, 0.2);
+        }
+        
+        .messages-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+            background: linear-gradient(135deg, #fdf2f8, #fef3f2);
+        }
+        
+        .message-input-container {
+            background: white;
+            border-top: 1px solid rgba(244, 114, 182, 0.1);
+            padding: 1rem;
+            position: sticky;
+            bottom: 0;
+        }
+        
+        .message-input-wrapper {
+            max-width: 600px;
+            margin: 0 auto;
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+        
+        .message-input {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            border: 2px solid rgba(244, 114, 182, 0.2);
+            border-radius: 25px;
+            font-size: 0.875rem;
+            transition: all 0.2s ease;
+            background: white;
+        }
+        
+        .message-input:focus {
+            outline: none;
+            border-color: #ec4899;
+            box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.1);
+        }
+        
+        .send-button {
+            background: linear-gradient(135deg, #ec4899, #be185d);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3);
+        }
+        
+        .send-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 16px rgba(236, 72, 153, 0.4);
+        }
+        
+        .send-button:active {
+            transform: scale(0.95);
+        }
+        
+        /* Message bubbles */
+        .message-bubble {
+            max-width: 280px;
+            padding: 0.75rem 1rem;
+            border-radius: 18px;
+            margin-bottom: 0.5rem;
+            position: relative;
+        }
+        
+        .message-bubble.sent {
+            background: linear-gradient(135deg, #ec4899, #be185d);
+            color: white;
+            margin-left: auto;
+            border-bottom-right-radius: 6px;
+        }
+        
+        .message-bubble.received {
+            background: white;
+            color: #1f2937;
+            margin-right: auto;
+            border-bottom-left-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .message-time {
+            font-size: 0.75rem;
+            opacity: 0.7;
+            margin-top: 0.25rem;
+        }
+        
+        /* Responsive design for all devices */
+        @media (max-width: 640px) {
+            .chat-header {
+                padding: 0.75rem;
+            }
+            
+            .user-name {
+                font-size: 1.125rem;
+            }
+            
+            .messages-container {
+                padding: 0.75rem;
+            }
+            
+            .message-input-container {
+                padding: 0.75rem;
+            }
+            
+            .message-bubble {
+                max-width: 240px;
+            }
+        }
+        
+        /* Desktop optimizations - More compact */
+        @media (min-width: 768px) {
+            .chat-container {
+                max-width: 700px;
+                margin: 0 auto;
+                height: 85vh;
+                border-radius: 16px;
+                box-shadow: 0 15px 30px rgba(0, 0, 0, 0.1);
+                margin-top: 7.5vh;
+                margin-bottom: 7.5vh;
+            }
+            
+            .chat-header {
+                border-radius: 16px 16px 0 0;
+                padding: 1.25rem;
+            }
+            
+            .chat-header-content {
+                max-width: 600px;
+            }
+            
+            .user-name {
+                font-size: 1.25rem;
+            }
+            
+            .user-details {
+                font-size: 0.9rem;
+            }
+            
+            .profile-image {
+                width: 48px;
+                height: 48px;
+            }
+            
+            .messages-container {
+                padding: 1.25rem;
+                max-height: 65vh;
+            }
+            
+            .message-bubble {
+                max-width: 350px;
+                font-size: 0.9rem;
+                padding: 0.875rem 1.125rem;
+            }
+            
+            .message-input-container {
+                padding: 1.25rem;
+                border-radius: 0 0 16px 16px;
+            }
+            
+            .message-input-wrapper {
+                max-width: 600px;
+            }
+            
+            .message-input {
+                padding: 0.875rem 1.25rem;
+                font-size: 0.9rem;
+                border-radius: 25px;
+            }
+            
+            .send-button {
+                width: 48px;
+                height: 48px;
+                font-size: 1rem;
+            }
+        }
+        
+        /* Large desktop screens - Moderate scaling */
+        @media (min-width: 1024px) {
+            .chat-container {
+                max-width: 800px;
+            }
+            
+            .chat-header-content {
+                max-width: 700px;
+            }
+            
+            .message-input-wrapper {
+                max-width: 700px;
+            }
+            
+            .message-bubble {
+                max-width: 400px;
+            }
+        }
+        
+        /* Extra large screens - Reasonable scaling */
+        @media (min-width: 1280px) {
+            .chat-container {
+                max-width: 900px;
+            }
+            
+            .chat-header-content {
+                max-width: 800px;
+            }
+            
+            .message-input-wrapper {
+                max-width: 800px;
+            }
+            
+            .message-bubble {
+                max-width: 450px;
+            }
+        }
+    </style>
+    
+    <div class="chat-container">
+        <!-- Enhanced Chat Header -->
+        <div class="chat-header">
+            <div class="chat-header-content">
+                <a href="{{ url_for('chats') }}" class="back-button">
+                    <i class="fas fa-arrow-left text-gray-600"></i>
                 </a>
-                <div class="w-10 h-10 bg-gradient-to-br from-pink-200 to-red-200 rounded-full flex items-center justify-center flex-shrink-0">
+                
+                <div class="user-info">
+                    <div class="user-name">{{ other_user.name }}</div>
+                    <div class="user-details">{{ other_user.department }} • {{ other_user.year }}</div>
+                </div>
+                
+                <div class="w-12 h-12 bg-gradient-to-br from-pink-200 to-red-200 rounded-full flex items-center justify-center flex-shrink-0">
                     {% if other_user.profile_photo %}
                         {% if other_user.profile_photo.startswith('data:image') %}
                             <img src="{{ other_user.profile_photo }}" 
-                                 alt="{{ other_user.name }}" class="w-10 h-10 object-cover rounded-full">
+                                 alt="{{ other_user.name }}" class="profile-image">
                         {% else %}
                             <img src="{{ url_for('static', filename='uploads/' + other_user.profile_photo) }}" 
-                                 alt="{{ other_user.name }}" class="w-10 h-10 object-cover rounded-full">
+                                 alt="{{ other_user.name }}" class="profile-image">
                         {% endif %}
                     {% else %}
                         <i class="fas fa-user text-lg text-gray-400"></i>
                     {% endif %}
                 </div>
-                <div class="flex-1">
-                    <h3 class="font-semibold text-gray-800">{{ other_user.name }}</h3>
-                    <p class="text-sm text-gray-600">{{ other_user.department }}</p>
-                </div>
             </div>
         </div>
         
         <!-- Messages -->
-        <div class="flex-1 overflow-y-auto p-4 space-y-4" id="messages">
+        <div class="messages-container" id="messages">
             {% for message in messages %}
             <div class="flex {% if message.sender_id == session.user_id %}justify-end{% else %}justify-start{% endif %}">
-                <div class="max-w-xs lg:max-w-md px-4 py-2 rounded-lg {% if message.sender_id == session.user_id %}bg-blue-500 text-white{% else %}bg-white text-gray-800 shadow-sm{% endif %}">
+                <div class="message-bubble {% if message.sender_id == session.user_id %}sent{% else %}received{% endif %}">
                     <p class="text-sm">{{ message.content }}</p>
-                    <p class="text-xs {% if message.sender_id == session.user_id %}text-blue-100{% else %}text-gray-500{% endif %} mt-1">
+                    <p class="message-time">
                         {{ message.sent_at[11:16] }}
                     </p>
                 </div>
@@ -1572,12 +1892,11 @@ def chat(user_id):
         </div>
         
         <!-- Message Input -->
-        <div class="bg-white border-t border-gray-200 px-4 py-3">
-            <form id="messageForm" class="flex space-x-3">
+        <div class="message-input-container">
+            <form id="messageForm" class="message-input-wrapper">
                 <input type="text" id="messageInput" name="message" placeholder="Type a message..." required
-                       class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent">
-                <button type="submit" 
-                        class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors">
+                       class="message-input">
+                <button type="submit" class="send-button">
                     <i class="fas fa-paper-plane"></i>
                 </button>
             </form>
@@ -1627,9 +1946,9 @@ def chat(user_id):
                             messageDiv.className = `flex ${message.sender_id === '{{ session.user_id }}' ? 'justify-end' : 'justify-start'}`;
                             
                             messageDiv.innerHTML = `
-                                <div class="max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${message.sender_id === '{{ session.user_id }}' ? 'bg-blue-500 text-white' : 'bg-white text-gray-800 shadow-sm'}">
+                                <div class="message-bubble ${message.sender_id === '{{ session.user_id }}' ? 'sent' : 'received'}">
                                     <p class="text-sm">${message.content}</p>
-                                    <p class="text-xs ${message.sender_id === '{{ session.user_id }}' ? 'text-blue-100' : 'text-gray-500'} mt-1">
+                                    <p class="message-time">
                                         ${message.sent_at.substring(11, 16)}
                                     </p>
                                 </div>
@@ -1688,9 +2007,9 @@ def chat(user_id):
             messageDiv.id = 'temp-message';
             
             messageDiv.innerHTML = `
-                <div class="max-w-xs lg:max-w-md px-4 py-2 rounded-lg bg-blue-500 text-white opacity-75">
+                <div class="message-bubble sent" style="opacity: 0.75;">
                     <p class="text-sm">${tempMessage}</p>
-                    <p class="text-xs text-blue-100 mt-1">
+                    <p class="message-time">
                         Sending...
                     </p>
                 </div>
@@ -1720,9 +2039,9 @@ def chat(user_id):
                     
                     // Update the temporary message with real data
                     messageDiv.innerHTML = `
-                        <div class="max-w-xs lg:max-w-md px-4 py-2 rounded-lg bg-blue-500 text-white">
+                        <div class="message-bubble sent">
                             <p class="text-sm">${data.message.content}</p>
-                            <p class="text-xs text-blue-100 mt-1">
+                            <p class="message-time">
                                 ${data.message.sent_at.substring(11, 16)}
                             </p>
                         </div>
@@ -1951,6 +2270,13 @@ def accept_like_and_chat(user_id):
         user1_name = user1_result.data[0]['name'] if user1_result.data else 'Someone'
         user2_name = user2_result.data[0]['name'] if user2_result.data else 'Someone'
         
+        # Delete older notifications from the same users to avoid duplicates
+        # Delete notifications where user1 received notifications from user2
+        supabase.table('notifications').delete().eq('user_id', user1_id).eq('from_user_id', user2_id).execute()
+        
+        # Delete notifications where user2 received notifications from user1
+        supabase.table('notifications').delete().eq('user_id', user2_id).eq('from_user_id', user1_id).execute()
+        
         # Create match notifications for both users
         supabase.table('notifications').insert([
             {
@@ -1999,6 +2325,10 @@ def accept_chat_and_start_chat(user_id):
         # Get user names for notification
         requester_result = supabase.table('users').select('name').eq('id', user_id).execute()
         requester_name = requester_result.data[0]['name'] if requester_result.data else 'Someone'
+        
+        # Delete older notifications between these users to avoid duplicates
+        supabase.table('notifications').delete().eq('user_id', user_id).eq('from_user_id', current_user_id).execute()
+        supabase.table('notifications').delete().eq('user_id', current_user_id).eq('from_user_id', user_id).execute()
         
         # Create notification for the other person
         supabase.table('notifications').insert({
@@ -2088,6 +2418,173 @@ def chats():
     chat_users.sort(key=lambda x: x['last_message_time'] or '', reverse=True)
     
     return render_template('chat_list.html', chat_list=chat_users)
+
+@app.route('/confessions')
+def confessions():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    current_user_id = session['user_id']
+    category_filter = request.args.get('category', 'all')
+    
+    # Build query for confessions
+    query = supabase.table('confessions').select('*').eq('is_approved', True).order('created_at', desc=True)
+    
+    # Apply category filter if specified
+    if category_filter != 'all':
+        query = query.eq('category', category_filter)
+    
+    # Get confessions
+    result = query.execute()
+    confessions = result.data if result.data else []
+    
+    # Get user's liked confessions for UI state
+    user_likes_result = supabase.table('confession_likes').select('confession_id').eq('user_id', current_user_id).execute()
+    user_liked_confession_ids = {like['confession_id'] for like in user_likes_result.data} if user_likes_result.data else set()
+    
+    # Add user like status to confessions
+    for confession in confessions:
+        confession['user_liked'] = confession['id'] in user_liked_confession_ids
+        # Generate anonymous letter for display
+        confession['anonymous_letter'] = chr(65 + (hash(confession['id']) % 26))
+    
+    return render_template('confessions_page.html', confessions=confessions, category_filter=category_filter)
+
+@app.route('/post-confession', methods=['POST'])
+def post_confession():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    current_user_id = session['user_id']
+    content = request.form.get('content', '').strip()
+    category = request.form.get('category', 'confession')
+    
+    if not content:
+        return jsonify({'error': 'Confession content is required'}), 400
+    
+    if len(content) > 500:
+        return jsonify({'error': 'Confession is too long (max 500 characters)'}), 400
+    
+    # Valid categories
+    valid_categories = ['crush', 'missed', 'confession', 'rant', 'appreciation', 'advice']
+    if category not in valid_categories:
+        category = 'confession'
+    
+    try:
+        # Insert confession
+        result = supabase.table('confessions').insert({
+            'user_id': current_user_id,
+            'content': content,
+            'category': category,
+            'likes_count': 0,
+            'views_count': 0,
+            'is_approved': True
+        }).execute()
+        
+        if result.data:
+            confession = result.data[0]
+            confession['anonymous_letter'] = chr(65 + (hash(confession['id']) % 26))
+            confession['user_liked'] = False
+            
+            return jsonify({
+                'success': True,
+                'confession': confession,
+                'message': 'Confession posted successfully!'
+            })
+        else:
+            return jsonify({'error': 'Failed to post confession'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': 'Server error'}), 500
+
+@app.route('/like-confession/<confession_id>', methods=['POST'])
+def like_confession(confession_id):
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    current_user_id = session['user_id']
+    
+    try:
+        # Check if user already liked this confession
+        existing_like = supabase.table('confession_likes').select('*').eq('confession_id', confession_id).eq('user_id', current_user_id).execute()
+        
+        if existing_like.data:
+            # Unlike - remove the like
+            supabase.table('confession_likes').delete().eq('confession_id', confession_id).eq('user_id', current_user_id).execute()
+            
+            # Decrease likes count
+            supabase.table('confessions').update({'likes_count': supabase.table('confessions').select('likes_count').eq('id', confession_id).execute().data[0]['likes_count'] - 1}).eq('id', confession_id).execute()
+            
+            return jsonify({
+                'success': True,
+                'liked': False,
+                'message': 'Confession unliked'
+            })
+        else:
+            # Like - add the like
+            supabase.table('confession_likes').insert({
+                'confession_id': confession_id,
+                'user_id': current_user_id
+            }).execute()
+            
+            # Increase likes count
+            supabase.table('confessions').update({'likes_count': supabase.table('confessions').select('likes_count').eq('id', confession_id).execute().data[0]['likes_count'] + 1}).eq('id', confession_id).execute()
+            
+            return jsonify({
+                'success': True,
+                'liked': True,
+                'message': 'Confession liked'
+            })
+            
+    except Exception as e:
+        return jsonify({'error': 'Server error'}), 500
+
+@app.route('/view-confession/<confession_id>', methods=['POST'])
+def view_confession(confession_id):
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        # Increment view count
+        supabase.table('confessions').update({'views_count': supabase.table('confessions').select('views_count').eq('id', confession_id).execute().data[0]['views_count'] + 1}).eq('id', confession_id).execute()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': 'Server error'}), 500
+
+@app.route('/get-confessions')
+def get_confessions():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    current_user_id = session['user_id']
+    category_filter = request.args.get('category', 'all')
+    page = int(request.args.get('page', 1))
+    limit = 10
+    offset = (page - 1) * limit
+    
+    # Build query
+    query = supabase.table('confessions').select('*').eq('is_approved', True).order('created_at', desc=True).range(offset, offset + limit - 1)
+    
+    if category_filter != 'all':
+        query = query.eq('category', category_filter)
+    
+    result = query.execute()
+    confessions = result.data if result.data else []
+    
+    # Get user's liked confessions
+    user_likes_result = supabase.table('confession_likes').select('confession_id').eq('user_id', current_user_id).execute()
+    user_liked_confession_ids = {like['confession_id'] for like in user_likes_result.data} if user_likes_result.data else set()
+    
+    # Add user like status and anonymous letter
+    for confession in confessions:
+        confession['user_liked'] = confession['id'] in user_liked_confession_ids
+        confession['anonymous_letter'] = chr(65 + (hash(confession['id']) % 26))
+    
+    return jsonify({
+        'confessions': confessions,
+        'has_more': len(confessions) == limit
+    })
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8000)

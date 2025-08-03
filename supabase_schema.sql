@@ -81,6 +81,27 @@ CREATE TABLE IF NOT EXISTS notifications (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Confessions table for anonymous posts
+CREATE TABLE IF NOT EXISTS confessions (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE, -- Anonymous but tracked for moderation
+    content TEXT NOT NULL,
+    category TEXT NOT NULL, -- 'crush', 'missed', 'confession', 'rant', 'appreciation', 'advice'
+    likes_count INTEGER DEFAULT 0,
+    views_count INTEGER DEFAULT 0,
+    is_approved BOOLEAN DEFAULT TRUE, -- For moderation
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Confession likes table to track who liked which confessions
+CREATE TABLE IF NOT EXISTS confession_likes (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    confession_id UUID REFERENCES confessions(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(confession_id, user_id)
+);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_verified ON users(is_verified);
@@ -95,6 +116,11 @@ CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender_id);
 CREATE INDEX IF NOT EXISTS idx_messages_receiver ON messages(receiver_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
+CREATE INDEX IF NOT EXISTS idx_confessions_user_id ON confessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_confessions_category ON confessions(category);
+CREATE INDEX IF NOT EXISTS idx_confessions_created_at ON confessions(created_at);
+CREATE INDEX IF NOT EXISTS idx_confession_likes_confession_id ON confession_likes(confession_id);
+CREATE INDEX IF NOT EXISTS idx_confession_likes_user_id ON confession_likes(user_id);
 
 -- For development: Disable Row Level Security to allow Flask sessions to work
 -- Comment out the RLS policies below if you want to enable them for production
@@ -107,6 +133,8 @@ CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
 -- ALTER TABLE chat_requests ENABLE ROW LEVEL SECURITY;
 -- ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 -- ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE confessions ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE confession_likes ENABLE ROW LEVEL SECURITY;
 
 -- Create policies (basic - you can customize these) - DISABLED FOR DEVELOPMENT
 -- CREATE POLICY "Users can view all users" ON users FOR SELECT USING (true);
@@ -131,4 +159,9 @@ CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
 
 -- CREATE POLICY "Notifications are viewable by recipient" ON notifications FOR SELECT USING (auth.uid()::text = user_id::text);
 -- CREATE POLICY "Users can create notifications" ON notifications FOR INSERT WITH CHECK (true);
--- CREATE POLICY "Users can update their own notifications" ON notifications FOR UPDATE USING (auth.uid()::text = user_id::text); 
+-- CREATE POLICY "Users can update their own notifications" ON notifications FOR UPDATE USING (auth.uid()::text = user_id::text);
+
+-- CREATE POLICY "Confessions are viewable by all" ON confessions FOR SELECT USING (is_approved = true);
+-- CREATE POLICY "Users can create confessions" ON confessions FOR INSERT WITH CHECK (true);
+-- CREATE POLICY "Confession likes are viewable by all" ON confession_likes FOR SELECT USING (true);
+-- CREATE POLICY "Users can create confession likes" ON confession_likes FOR INSERT WITH CHECK (true); 
