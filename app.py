@@ -969,13 +969,181 @@ def profile():
             </div>
             
             <div class="space-y-3 slide-up">
-                <button class="w-full btn-primary text-white py-3 rounded-xl font-semibold">
+                <a href="/edit-profile" class="block w-full btn-primary text-white py-3 rounded-xl font-semibold text-center">
                     Edit Profile
-                </button>
+                </a>
                 <a href="{{ url_for('dashboard') }}" class="block w-full bg-gray-200 text-gray-700 text-center py-3 rounded-xl font-semibold hover:bg-gray-300 transition-colors">
                     Back to Discover
                 </a>
             </div>
+        </div>
+    </div>
+    {% endblock %}
+    ''', user=user, prompts=prompts)
+
+@app.route('/edit-profile', methods=['GET', 'POST'])
+def edit_profile():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    # Get user data
+    user_result = supabase.table('users').select('*').eq('id', session['user_id']).execute()
+    if not user_result.data:
+        return redirect(url_for('login'))
+    
+    user = user_result.data[0]
+    
+    if request.method == 'POST':
+        name = request.form['name']
+        age = request.form['age']
+        pronouns = request.form['pronouns']
+        department = request.form['department']
+        year = request.form['year']
+        looking_for = request.form['looking_for']
+        bio = request.form['bio']
+        
+        # Handle file upload - convert to base64 and store in database
+        profile_photo = user.get('profile_photo')  # Keep existing photo if no new one uploaded
+        if 'profile_photo' in request.files:
+            file = request.files['profile_photo']
+            if file and allowed_file(file.filename):
+                # Convert image to base64
+                profile_photo = image_to_base64(file)
+                if not profile_photo:
+                    flash('Error processing image. Please try again.', 'error')
+                    return redirect(url_for('edit_profile'))
+        
+        # Update user profile
+        supabase.table('users').update({
+            'name': name,
+            'age': age,
+            'pronouns': pronouns,
+            'department': department,
+            'year': year,
+            'looking_for': looking_for,
+            'bio': bio,
+            'profile_photo': profile_photo
+        }).eq('id', session['user_id']).execute()
+        
+        # Handle prompts
+        prompts = [
+            ('What makes you laugh?', request.form.get('prompt1')),
+            ('My ideal study buddy is...', request.form.get('prompt2')),
+            ('Best campus spot?', request.form.get('prompt3'))
+        ]
+        
+        # Delete existing prompts
+        supabase.table('user_prompts').delete().eq('user_id', session['user_id']).execute()
+        
+        # Add new prompts
+        for question, answer in prompts:
+            if answer:
+                supabase.table('user_prompts').insert({
+                    'user_id': session['user_id'],
+                    'prompt_question': question,
+                    'prompt_answer': answer
+                }).execute()
+        
+        flash('Profile updated successfully! 🎉', 'success')
+        return redirect(url_for('profile'))
+    
+    # Get user prompts for pre-filling the form
+    prompts_result = supabase.table('user_prompts').select('*').eq('user_id', session['user_id']).execute()
+    prompts = {p['prompt_question']: p['prompt_answer'] for p in prompts_result.data}
+    
+    return render_template_string('''
+    {% extends "base.html" %}
+    {% block content %}
+    <div class="bg-gray-50 min-h-screen py-8">
+        <div class="max-w-md mx-auto px-4">
+            <div class="text-center mb-8 slide-up">
+                <h1 class="text-2xl font-bold text-gray-800">Edit Your Profile</h1>
+                <p class="text-gray-600 mt-2">Update your information</p>
+            </div>
+            
+            <form method="POST" enctype="multipart/form-data" class="space-y-6">
+                <div class="bg-white rounded-xl p-6 shadow-sm slide-up">
+                    <h3 class="font-semibold text-gray-800 mb-4">Profile Photo</h3>
+                    <input type="file" name="profile_photo" accept="image/*" 
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl">
+                    {% if user.profile_photo %}
+                    <p class="text-xs text-gray-500 mt-2">Current photo will be kept if no new photo is selected</p>
+                    {% endif %}
+                </div>
+                
+                <div class="bg-white rounded-xl p-6 shadow-sm space-y-4 slide-up">
+                    <h3 class="font-semibold text-gray-800 mb-4">Basic Info</h3>
+                    
+                    <input type="text" name="name" required placeholder="Your Name" value="{{ user.name or '' }}"
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500">
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <input type="number" name="age" required min="18" max="100" placeholder="Age" value="{{ user.age or '' }}"
+                               class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500">
+                        
+                        <select name="pronouns" required 
+                                class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500">
+                            <option value="">Pronouns</option>
+                            <option value="she/her" {% if user.pronouns == 'she/her' %}selected{% endif %}>she/her</option>
+                            <option value="he/him" {% if user.pronouns == 'he/him' %}selected{% endif %}>he/him</option>
+                            <option value="they/them" {% if user.pronouns == 'they/them' %}selected{% endif %}>they/them</option>
+                            <option value="other" {% if user.pronouns == 'other' %}selected{% endif %}>other</option>
+                        </select>
+                    </div>
+                    
+                    <input type="text" name="department" required placeholder="Department (e.g., Computer Science)" value="{{ user.department or '' }}"
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500">
+                    
+                    <select name="year" required 
+                            class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500">
+                        <option value="">Year</option>
+                        <option value="Freshman" {% if user.year == 'Freshman' %}selected{% endif %}>Freshman</option>
+                        <option value="Sophomore" {% if user.year == 'Sophomore' %}selected{% endif %}>Sophomore</option>
+                        <option value="Junior" {% if user.year == 'Junior' %}selected{% endif %}>Junior</option>
+                        <option value="Senior" {% if user.year == 'Senior' %}selected{% endif %}>Senior</option>
+                        <option value="Graduate" {% if user.year == 'Graduate' %}selected{% endif %}>Graduate</option>
+                        <option value="PhD" {% if user.year == 'PhD' %}selected{% endif %}>PhD</option>
+                    </select>
+                    
+                    <select name="looking_for" required 
+                            class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500">
+                        <option value="">Looking for</option>
+                        <option value="friendship" {% if user.looking_for == 'friendship' %}selected{% endif %}>Friendship</option>
+                        <option value="dating" {% if user.looking_for == 'dating' %}selected{% endif %}>Dating</option>
+                        <option value="relationship" {% if user.looking_for == 'relationship' %}selected{% endif %}>Relationship</option>
+                        <option value="networking" {% if user.looking_for == 'networking' %}selected{% endif %}>Networking</option>
+                    </select>
+                </div>
+                
+                <div class="bg-white rounded-xl p-6 shadow-sm slide-up">
+                    <h3 class="font-semibold text-gray-800 mb-4">About You</h3>
+                    <textarea name="bio" rows="4" placeholder="Tell people about yourself..."
+                              class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500">{{ user.bio or '' }}</textarea>
+                </div>
+                
+                <div class="bg-white rounded-xl p-6 shadow-sm space-y-4 slide-up">
+                    <h3 class="font-semibold text-gray-800 mb-4">Fun Prompts</h3>
+                    
+                    <input type="text" name="prompt1" placeholder="What makes you laugh?" value="{{ prompts.get('What makes you laugh?', '') }}"
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500">
+                    
+                    <input type="text" name="prompt2" placeholder="My ideal study buddy is..." value="{{ prompts.get('My ideal study buddy is...', '') }}"
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500">
+                    
+                    <input type="text" name="prompt3" placeholder="Best campus spot?" value="{{ prompts.get('Best campus spot?', '') }}"
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500">
+                </div>
+                
+                <div class="space-y-3 slide-up">
+                    <button type="submit" 
+                            class="w-full btn-primary text-white py-4 rounded-xl font-semibold shadow-lg">
+                        Update Profile
+                    </button>
+                    <a href="{{ url_for('profile') }}" class="block w-full bg-gray-200 text-gray-700 text-center py-3 rounded-xl font-semibold hover:bg-gray-300 transition-colors">
+                        Cancel
+                    </a>
+                </div>
+            </form>
         </div>
     </div>
     {% endblock %}

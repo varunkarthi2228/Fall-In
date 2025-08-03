@@ -12,8 +12,13 @@
         <div class="bg-white rounded-2xl shadow-lg overflow-hidden mb-6 slide-up">
             <div class="h-64 flex items-center justify-center" style="background: linear-gradient(135deg, #f9a8d4, #ec4899);">
                 {% if user.profile_photo %}
-                    <img src="{{ url_for('static', filename='uploads/' + user.profile_photo) }}" 
-                         alt="{{ user.name }}" class="w-full h-full object-cover">
+                    {% if user.profile_photo.startswith('data:image') %}
+                        <img src="{{ user.profile_photo }}" 
+                             alt="{{ user.name }}" class="w-full h-full object-cover">
+                    {% else %}
+                        <img src="{{ url_for('static', filename='uploads/' + user.profile_photo) }}" 
+                             alt="{{ user.name }}" class="w-full h-full object-cover">
+                    {% endif %}
                 {% else %}
                     <div class="text-center text-white">
                         <i class="fas fa-user text-6xl mb-4 opacity-50"></i>
@@ -53,9 +58,9 @@
         </div>
         
         <div class="space-y-3 slide-up">
-            <button class="w-full text-white py-3 rounded-xl font-semibold" style="background: linear-gradient(135deg, #ec4899, #be185d);">
+            <a href="/edit-profile" class="block w-full text-white py-3 rounded-xl font-semibold text-center" style="background: linear-gradient(135deg, #ec4899, #be185d);">
                 Edit Profile
-            </button>
+            </a>
             <a href="{{ url_for('dashboard') }}" class="block w-full bg-white text-center py-3 rounded-xl font-semibold hover:bg-pink-50 transition-colors" style="color: #be185d; border: 1px solid #f9a8d4;">
                 Back to Discover
             </a>

@@ -19,7 +19,7 @@
         position: relative;
         width: 100%;
         max-width: 400px;
-        height: 600px;
+        height: 650px;
         margin: 0 auto;
         perspective: 1000px;
         transform-style: preserve-3d;
@@ -269,6 +269,77 @@
         border-color: rgba(244, 114, 182, 0.2);
     }
 
+    /* Scrollable Additional Info Section */
+    .additional-info-container {
+        max-height: 220px;
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(244, 114, 182, 0.5) transparent;
+        scroll-behavior: smooth;
+        -webkit-overflow-scrolling: touch;
+        border: 1px solid rgba(244, 114, 182, 0.1);
+        border-radius: 12px;
+        background: rgba(253, 242, 248, 0.8);
+        margin: 8px;
+        position: relative;
+        padding-bottom: 20px;
+    }
+
+    .additional-info-container::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .additional-info-container::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .additional-info-container::-webkit-scrollbar-thumb {
+        background: rgba(244, 114, 182, 0.6);
+        border-radius: 3px;
+    }
+
+    .additional-info-container::-webkit-scrollbar-thumb:hover {
+        background: rgba(244, 114, 182, 0.8);
+    }
+
+    /* Hover effect for scrollable content */
+    .swipe-card:hover .additional-info-container {
+        scrollbar-color: rgba(244, 114, 182, 0.5) transparent;
+    }
+
+    /* Mobile scroll indicator */
+    @media (max-width: 768px) {
+        .additional-info-container {
+            max-height: 180px;
+        }
+        
+        .additional-info-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .additional-info-container::-webkit-scrollbar-thumb {
+            background: rgba(244, 114, 182, 0.6);
+        }
+    }
+
+    /* Scroll fade indicators */
+    .additional-info-container::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 20px;
+        background: linear-gradient(transparent, rgba(253, 242, 248, 0.9));
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    }
+
+    .additional-info-container.has-more-content::after {
+        opacity: 1;
+    }
+
     /* Smooth physics animations */
     .card-exit-left {
         animation: swipeLeft 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
@@ -430,15 +501,24 @@
                 
                 <!-- Additional Info -->
                 {% if match.prompts %}
-                <div class="p-4 space-y-3">
-                    {% for prompt in match.prompts.split(' | ')[:2] %}
-                        {% if prompt and ':' in prompt %}
-                        <div class="info-card">
-                            <div class="text-xs font-semibold gradient-text">{{ prompt.split(':')[0] }}</div>
-                            <div class="text-sm text-gray-700 mt-1">{{ prompt.split(':')[1] }}</div>
+                <div class="additional-info-container">
+                    <div class="sticky top-0 bg-gradient-to-b from-pink-50 to-transparent p-3 text-center border-b border-pink-200">
+                        <div class="text-xs text-pink-600 font-semibold">
+                           
                         </div>
-                        {% endif %}
-                    {% endfor %}
+                    </div>
+                    <div class="p-4 space-y-3">
+                        {% for prompt in match.prompts.split(' | ') %}
+                            {% if prompt and ':' in prompt %}
+                            <div class="info-card">
+                                <div class="text-xs font-semibold gradient-text">{{ prompt.split(':')[0] }}</div>
+                                <div class="text-sm text-gray-700 mt-1">{{ prompt.split(':')[1] }}</div>
+                            </div>
+                            {% endif %}
+                        {% endfor %}
+                        <!-- Extra space at the bottom to ensure all content is accessible -->
+                        <div class="h-8"></div>
+                    </div>
                 </div>
                 {% endif %}
             </div>
@@ -514,6 +594,7 @@ class RealisticSwipe {
         this.setCurrentCard();
         this.addEventListeners();
         this.addButtonListeners();
+        this.setupScrollIndicators();
         console.log('Swipe system initialized with', this.cards.length, 'cards');
     }
     
@@ -542,6 +623,26 @@ class RealisticSwipe {
         
         // Prevent default dragging
         card.addEventListener('dragstart', e => e.preventDefault());
+        
+        // Add scroll event listeners for the additional info container
+        const scrollContainer = card.querySelector('.additional-info-container');
+        if (scrollContainer) {
+            scrollContainer.addEventListener('touchstart', (e) => {
+                e.stopPropagation();
+            }, { passive: true });
+            
+            scrollContainer.addEventListener('touchmove', (e) => {
+                e.stopPropagation();
+            }, { passive: true });
+            
+            scrollContainer.addEventListener('mousedown', (e) => {
+                e.stopPropagation();
+            });
+            
+            scrollContainer.addEventListener('wheel', (e) => {
+                e.stopPropagation();
+            });
+        }
     }
     
     addEventListeners() {
@@ -586,6 +687,25 @@ class RealisticSwipe {
                 hapticFeedback('medium');
             });
         }
+    }
+
+    setupScrollIndicators() {
+        const scrollContainers = document.querySelectorAll('.additional-info-container');
+        scrollContainers.forEach(container => {
+            const content = container.querySelector('.p-4');
+            if (content && content.scrollHeight > container.clientHeight) {
+                container.classList.add('has-more-content');
+            }
+            
+            container.addEventListener('scroll', () => {
+                const isAtBottom = container.scrollTop + container.clientHeight >= content.scrollHeight - 10;
+                if (isAtBottom) {
+                    container.classList.remove('has-more-content');
+                } else {
+                    container.classList.add('has-more-content');
+                }
+            });
+        });
     }
     
     onStart(e) {
@@ -768,7 +888,8 @@ class RealisticSwipe {
         fetch(url, { method: 'GET' })
             .then(response => response.text())
             .then(html => {
-                if (action === 'like' && html.includes('match')) {
+                // Only show match modal if it's actually a mutual match
+                if (action === 'like' && html.includes("It's a match! 💖")) {
                     this.showMatchModal(userId);
                 }
             })
