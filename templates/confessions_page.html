@@ -425,32 +425,59 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
-        // Create new confession card
-        const newConfession = createConfessionCard(content, category);
+        // Show loading state
+        const submitBtn = this.querySelector('button[type="submit"]');
+        const originalText = submitBtn.innerHTML;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Posting...';
+        submitBtn.disabled = true;
         
-        // Add to feed
-        const feed = document.getElementById('confessionsFeed');
-        feed.insertAdjacentHTML('afterbegin', newConfession);
-        
-        // Reset form
-        this.reset();
-        charCount.textContent = '0';
-        charCount.style.color = '#6b7280';
-        
-        // Show success message
-        showToast('Your confession has been posted anonymously! 💕', 'success');
-        
-        // Add animation to new card
-        const newCard = feed.firstElementChild;
-        newCard.style.opacity = '0';
-        newCard.style.transform = 'translateY(-20px)';
-        setTimeout(() => {
-            newCard.style.transition = 'all 0.5s ease';
-            newCard.style.opacity = '1';
-            newCard.style.transform = 'translateY(0)';
-        }, 100);
-        
-        hapticFeedback('medium');
+        // Send to backend
+        fetch('/post-confession', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Create new confession card with real data
+                const newConfession = createConfessionCard(data.confession.content, data.confession.category, data.confession);
+                
+                // Add to feed
+                const feed = document.getElementById('confessionsFeed');
+                feed.insertAdjacentHTML('afterbegin', newConfession);
+                
+                // Reset form
+                confessionForm.reset();
+                charCount.textContent = '0';
+                charCount.style.color = '#6b7280';
+                
+                // Show success message
+                showToast('Your confession has been posted anonymously! 💕', 'success');
+                
+                // Add animation to new card
+                const newCard = feed.firstElementChild;
+                newCard.style.opacity = '0';
+                newCard.style.transform = 'translateY(-20px)';
+                setTimeout(() => {
+                    newCard.style.transition = 'all 0.5s ease';
+                    newCard.style.opacity = '1';
+                    newCard.style.transform = 'translateY(0)';
+                }, 100);
+                
+                hapticFeedback('medium');
+            } else {
+                showToast(data.error || 'Failed to post confession', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error posting confession:', error);
+            showToast('Network error. Please try again.', 'error');
+        })
+        .finally(() => {
+            // Reset button state
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
+        });
     });
     
     // Category filtering
@@ -499,7 +526,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    function createConfessionCard(content, category) {
+    function createConfessionCard(content, category, confessionData = null) {
         const categoryEmojis = {
             crush: '💕 Secret Crush',
             missed: '👀 Missed Connection',
@@ -509,10 +536,14 @@ document.addEventListener('DOMContentLoaded', function() {
             advice: '❓ Need Advice'
         };
         
-        const anonymousLetter = String.fromCharCode(65 + Math.floor(Math.random() * 26));
+        // Use real data if available, otherwise generate random
+        const anonymousLetter = confessionData ? confessionData.anonymous_letter : String.fromCharCode(65 + Math.floor(Math.random() * 26));
+        const confessionId = confessionData ? confessionData.id : 'temp-' + Date.now();
+        const likesCount = confessionData ? (confessionData.likes_count || 0) : 0;
+        const viewsCount = confessionData ? (confessionData.views_count || 0) : 0;
         
         return `
-            <div class="confession-card p-6 slide-up" data-category="${category}">
+            <div class="confession-card p-6 slide-up" data-category="${category}" data-confession-id="${confessionId}">
                 <div class="floating-hearts">${category === 'crush' ? '💕' : category === 'missed' ? '👀' : category === 'appreciation' ? '🙏' : category === 'advice' ? '❓' : category === 'rant' ? '😤' : '💭'}</div>
                 <div class="flex items-start mb-4">
                     <div class="anonymous-avatar mr-4">${anonymousLetter}</div>
@@ -526,17 +557,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                 </div>
                 <div class="confession-stats">
-                    <button class="like-btn stat-item">
+                    <button class="like-btn stat-item" data-confession-id="${confessionId}">
                         <i class="fas fa-heart"></i>
-                        <span>0</span>
+                        <span>${likesCount}</span>
                     </button>
                     <div class="stat-item">
-                        <i class="fas fa-comment"></i>
-                        <span>0 replies</span>
-                    </div>
-                    <div class="stat-item">
                         <i class="fas fa-eye"></i>
-                        <span>1 view</span>
+                        <span>${viewsCount} views</span>
                     </div>
                 </div>
             </div>

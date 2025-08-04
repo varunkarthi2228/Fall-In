@@ -1019,9 +1019,7 @@ class RealisticSwipe {
             .then(response => response.text())
             .then(html => {
                 // Only show match modal if it's actually a mutual match
-                if (action === 'like' && html.includes("It's a match! 💖")) {
-                    this.showMatchModal(userId);
-                }
+                
             })
             .catch(error => {
                 console.error('Error:', error);
