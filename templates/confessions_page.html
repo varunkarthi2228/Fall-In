@@ -320,27 +320,8 @@
                                     {% else %}💭 General Confession{% endif %}
                                 </span>
                                 {% if confession.created_at %}
-                                    {% set time_diff = (now - confession.created_at).total_seconds() %}
-                                    {% if time_diff < 3600 %}
-                                        <span class="new-badge">New</span>
-                                    {% endif %}
+                                    <span class="text-xs text-gray-500">{{ confession.time_ago }}</span>
                                 {% endif %}
-                                <span class="text-xs text-gray-500">
-                                    {% if confession.created_at %}
-                                        {% set time_diff = (now - confession.created_at).total_seconds() %}
-                                        {% if time_diff < 60 %}
-                                            Just now
-                                        {% elif time_diff < 3600 %}
-                                            {{ (time_diff / 60) | int }} minutes ago
-                                        {% elif time_diff < 86400 %}
-                                            {{ (time_diff / 3600) | int }} hours ago
-                                        {% else %}
-                                            {{ (time_diff / 86400) | int }} days ago
-                                        {% endif %}
-                                    {% else %}
-                                        Recently
-                                    {% endif %}
-                                </span>
                             </div>
                             <p class="confession-text">{{ confession.content }}</p>
                         </div>

@@ -5,7 +5,7 @@ import os
 import secrets
 import uuid
 import base64
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from flask import Flask, render_template, render_template_string, request, redirect, url_for, flash, session, jsonify
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -2419,6 +2419,23 @@ def chats():
     
     return render_template('chat_list.html', chat_list=chat_users)
 
+def time_ago(dt_str):
+    try:
+        dt = datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
+        now = datetime.now(timezone.utc)
+        diff = (now - dt)
+        seconds = diff.total_seconds()
+        if seconds < 60:
+            return "Just now"
+        elif seconds < 3600:
+            return f"{int(seconds // 60)} minutes ago"
+        elif seconds < 86400:
+            return f"{int(seconds // 3600)} hours ago"
+        else:
+            return f"{int(seconds // 86400)} days ago"
+    except Exception:
+        return "Recently"
+
 @app.route('/confessions')
 def confessions():
     if 'user_id' not in session:
@@ -2442,11 +2459,11 @@ def confessions():
     user_likes_result = supabase.table('confession_likes').select('confession_id').eq('user_id', current_user_id).execute()
     user_liked_confession_ids = {like['confession_id'] for like in user_likes_result.data} if user_likes_result.data else set()
     
-    # Add user like status to confessions
+    # Add user like status and time_ago to confessions
     for confession in confessions:
         confession['user_liked'] = confession['id'] in user_liked_confession_ids
-        # Generate anonymous letter for display
         confession['anonymous_letter'] = chr(65 + (hash(confession['id']) % 26))
+        confession['time_ago'] = time_ago(confession['created_at'])
     
     return render_template('confessions_page.html', confessions=confessions, category_filter=category_filter)
 
