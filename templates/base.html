@@ -243,6 +243,18 @@
                 font-size: 1.5rem;
             }
         }
+        
+        /* Ensure content doesn't get hidden behind navbar */
+        main {
+            padding-top: 1rem;
+        }
+        
+        /* Additional spacing for mobile navbar */
+        @media (max-width: 768px) {
+            main {
+                padding-top: 1.5rem;
+            }
+        }
     </style>
 </head>
 <body class="min-h-screen">
@@ -285,13 +297,13 @@
             </div>
         </div>
     </nav>
-    <div class="h-20"></div> <!-- Spacer for fixed nav -->
+    <div class="h-24 md:h-20"></div> <!-- Spacer for fixed nav - more space on mobile -->
     {% endif %}
 
     <!-- Flash Messages -->
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
-            <div class="fixed top-24 right-4 z-50 space-y-2" id="flash-messages">
+            <div class="fixed top-28 md:top-24 right-4 z-50 space-y-2" id="flash-messages">
                 {% for category, message in messages %}
                     <div class="flash-message max-w-sm p-4 rounded-xl shadow-lg {{ 'bg-green-500 text-white' if category == 'success' else 'bg-red-500 text-white' if category == 'error' else 'bg-yellow-500 text-black' if category == 'warning' else 'bg-blue-500 text-white' }}">
                         <div class="flex items-center space-x-3">
@@ -392,7 +404,7 @@
             };
             
             const toast = document.createElement('div');
-            toast.className = `fixed top-24 right-4 z-50 max-w-sm p-4 rounded-xl shadow-lg ${colors[type]} slide-up`;
+            toast.className = `fixed top-28 md:top-24 right-4 z-50 max-w-sm p-4 rounded-xl shadow-lg ${colors[type]} slide-up`;
             toast.innerHTML = `
                 <div class="flex items-center space-x-2">
                     <span>${message}</span>
