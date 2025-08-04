@@ -207,15 +207,75 @@
         text-transform: uppercase;
         letter-spacing: 0.05em;
     }
+    
+    /* Comment styles */
+    .comment-btn {
+        background: rgba(244, 114, 182, 0.1);
+        color: var(--bright-pink);
+        border: 1px solid rgba(244, 114, 182, 0.2);
+        border-radius: 50px;
+        padding: 8px 16px;
+        font-size: 0.875rem;
+        transition: all 0.2s ease;
+    }
+    
+    .comment-btn:hover {
+        background: rgba(244, 114, 182, 0.2);
+        transform: scale(1.05);
+    }
+    
+    .like-comment-btn {
+        background: none;
+        border: none;
+        color: #6b7280;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        padding: 4px 8px;
+        border-radius: 4px;
+    }
+    
+    .like-comment-btn:hover {
+        background: rgba(244, 114, 182, 0.1);
+        color: var(--bright-pink);
+    }
+    
+    .like-comment-btn.liked {
+        color: var(--bright-pink);
+    }
+    
+    .reply-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        padding: 4px 8px;
+        border-radius: 4px;
+    }
+    
+    .reply-btn:hover {
+        background: rgba(244, 114, 182, 0.1);
+    }
+    
+    .comment-item {
+        transition: all 0.2s ease;
+    }
+    
+    .comment-item:hover {
+        background: rgba(244, 114, 182, 0.02);
+        border-radius: 8px;
+    }
+    
+    .reply-form {
+        transition: all 0.3s ease;
+    }
 </style>
 
 <div class="pb-32 min-h-screen pt-4">
     <div class="max-w-md mx-auto px-4">
         <!-- Header -->
         <div class="text-center mb-6 slide-up">
-            <h1 class="text-2xl font-bold gradient-text mb-2">💕 Campus Confessions</h1>
-            <p class="text-gray-600">Share your feelings anonymously</p>
-            <p class="text-sm text-gray-500 mt-1">Express yourself freely - all posts are completely anonymous</p>
+            <h1 class="text-2xl font-bold gradient-text mb-2">💕 Confessions</h1>
+    
         </div>
 
         <!-- New Confession Form -->
@@ -247,12 +307,11 @@
                     <textarea 
                         name="content" 
                         placeholder="Share your thoughts... (e.g., 'To the person in my 2pm Biology class who always sits in the front row...')"
-                        rows="4" 
+                        rows="6" 
                         class="w-full px-4 py-3 focus:outline-none"
-                        maxlength="500"
                         required></textarea>
                     <div class="text-right text-xs text-gray-500 mt-1">
-                        <span id="charCount">0</span>/500 characters
+                        <span>Express yourself freely </span>
                     </div>
                 </div>
 
@@ -331,9 +390,38 @@
                             <i class="fas fa-heart"></i>
                             <span>{{ confession.likes_count or 0 }}</span>
                         </button>
-                        <div class="stat-item">
-                            <i class="fas fa-eye"></i>
-                            <span>{{ confession.views_count or 0 }} views</span>
+                        <button class="comment-btn stat-item" data-confession-id="{{ confession.id }}">
+                            <i class="fas fa-comment"></i>
+                            <span class="comment-count">0</span>
+                        </button>
+                        
+                    </div>
+                    
+                    <!-- Comments Section -->
+                    <div class="comments-section mt-4 hidden" data-confession-id="{{ confession.id }}">
+                        <div class="border-t border-pink-200 pt-4">
+                            <!-- Comment Form -->
+                            <div class="comment-form mb-4">
+                                <div class="flex items-start space-x-3">
+                                    <div class="anonymous-avatar w-8 h-8 text-sm">A</div>
+                                    <div class="flex-1">
+                                        <textarea 
+                                            class="w-full px-3 py-2 border border-pink-200 rounded-lg resize-none focus:border-pink-400 focus:outline-none text-sm"
+                                            placeholder="Add a comment..."
+                                            rows="2"></textarea>
+                                        <div class="flex justify-end mt-2">
+                                            <button class="post-comment-btn bg-pink-500 text-white px-4 py-1 rounded-full text-sm hover:bg-pink-600 transition-colors" data-confession-id="{{ confession.id }}">
+                                                Comment
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Comments List -->
+                            <div class="comments-list space-y-3">
+                                <!-- Comments will be loaded here -->
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -392,6 +480,207 @@ document.addEventListener('DOMContentLoaded', function() {
             charCount.style.color = '#6b7280';
         }
     });
+    
+    // Comment functionality
+    document.addEventListener('click', function(e) {
+        // Toggle comments section
+        if (e.target.closest('.comment-btn')) {
+            const commentBtn = e.target.closest('.comment-btn');
+            const confessionId = commentBtn.dataset.confessionId;
+            const commentsSection = document.querySelector(`.comments-section[data-confession-id="${confessionId}"]`);
+            
+            if (commentsSection.classList.contains('hidden')) {
+                commentsSection.classList.remove('hidden');
+                loadComments(confessionId);
+            } else {
+                commentsSection.classList.add('hidden');
+            }
+            
+            hapticFeedback('light');
+        }
+        
+        // Post comment
+        if (e.target.closest('.post-comment-btn')) {
+            const postBtn = e.target.closest('.post-comment-btn');
+            const confessionId = postBtn.dataset.confessionId;
+            const commentForm = postBtn.closest('.comment-form');
+            const textarea = commentForm.querySelector('textarea');
+            const content = textarea.value.trim();
+            
+            if (!content) {
+                showToast('Please write a comment', 'error');
+                return;
+            }
+            
+            postComment(confessionId, content);
+            textarea.value = '';
+        }
+        
+        // Reply to comment
+        if (e.target.closest('.reply-btn')) {
+            const replyBtn = e.target.closest('.reply-btn');
+            const commentId = replyBtn.dataset.commentId;
+            const commentElement = replyBtn.closest('.comment-item');
+            
+            // Show reply form
+            const replyForm = commentElement.querySelector('.reply-form');
+            if (replyForm) {
+                replyForm.classList.toggle('hidden');
+            }
+        }
+        
+        // Post reply
+        if (e.target.closest('.post-reply-btn')) {
+            const postReplyBtn = e.target.closest('.post-reply-btn');
+            const confessionId = postReplyBtn.dataset.confessionId;
+            const parentCommentId = postReplyBtn.dataset.parentCommentId;
+            const replyForm = postReplyBtn.closest('.reply-form');
+            const textarea = replyForm.querySelector('textarea');
+            const content = textarea.value.trim();
+            
+            if (!content) {
+                showToast('Please write a reply', 'error');
+                return;
+            }
+            
+            postComment(confessionId, content, parentCommentId);
+            textarea.value = '';
+            replyForm.classList.add('hidden');
+        }
+        
+        // Like comment
+        if (e.target.closest('.like-comment-btn')) {
+            const likeBtn = e.target.closest('.like-comment-btn');
+            const commentId = likeBtn.dataset.commentId;
+            likeComment(commentId, likeBtn);
+        }
+    });
+    
+    function loadComments(confessionId) {
+        fetch(`/get-comments/${confessionId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const commentsList = document.querySelector(`.comments-section[data-confession-id="${confessionId}"] .comments-list`);
+                    commentsList.innerHTML = renderComments(data.comments);
+                    
+                    // Update comment count
+                    const commentCount = document.querySelector(`.comment-btn[data-confession-id="${confessionId}"] .comment-count`);
+                    commentCount.textContent = data.comments.length;
+                }
+            })
+            .catch(error => {
+                console.error('Error loading comments:', error);
+                showToast('Failed to load comments', 'error');
+            });
+    }
+    
+    function postComment(confessionId, content, parentCommentId = null) {
+        const formData = new FormData();
+        formData.append('confession_id', confessionId);
+        formData.append('content', content);
+        if (parentCommentId) {
+            formData.append('parent_comment_id', parentCommentId);
+        }
+        
+        fetch('/post-comment', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('Comment posted successfully!', 'success');
+                loadComments(confessionId);
+                hapticFeedback('light');
+            } else {
+                showToast(data.error || 'Failed to post comment', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error posting comment:', error);
+            showToast('Network error. Please try again.', 'error');
+        });
+    }
+    
+    function likeComment(commentId, likeBtn) {
+        fetch(`/like-comment/${commentId}`, {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const heartIcon = likeBtn.querySelector('i');
+                const countSpan = likeBtn.querySelector('span');
+                let count = parseInt(countSpan.textContent);
+                
+                if (data.liked) {
+                    likeBtn.classList.add('liked');
+                    countSpan.textContent = count + 1;
+                } else {
+                    likeBtn.classList.remove('liked');
+                    countSpan.textContent = count - 1;
+                }
+                
+                hapticFeedback('light');
+            }
+        })
+        .catch(error => {
+            console.error('Error liking comment:', error);
+        });
+    }
+    
+    function renderComments(comments, level = 0) {
+        if (!comments || comments.length === 0) {
+            return '<p class="text-gray-500 text-sm text-center py-4">No comments yet. Be the first to comment!</p>';
+        }
+        
+        return comments.map(comment => `
+            <div class="comment-item" data-comment-id="${comment.id}" style="margin-left: ${level * 20}px;">
+                <div class="flex items-start space-x-3">
+                    <div class="anonymous-avatar w-8 h-8 text-sm">${comment.anonymous_letter}</div>
+                    <div class="flex-1">
+                        <div class="bg-gray-50 rounded-lg p-3">
+                            <p class="text-sm text-gray-800">${comment.content}</p>
+                            <div class="flex items-center space-x-4 mt-2 text-xs text-gray-500">
+                                <span>${comment.time_ago}</span>
+                                <button class="like-comment-btn ${comment.user_liked ? 'liked' : ''}" data-comment-id="${comment.id}">
+                                    <i class="fas fa-heart"></i>
+                                    <span>${comment.likes_count || 0}</span>
+                                </button>
+                                <button class="reply-btn text-pink-500 hover:text-pink-600" data-comment-id="${comment.id}">
+                                    Reply
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Reply Form -->
+                        <div class="reply-form hidden mt-3">
+                            <div class="flex items-start space-x-3">
+                                <div class="anonymous-avatar w-6 h-6 text-xs">A</div>
+                                <div class="flex-1">
+                                    <textarea 
+                                        class="w-full px-2 py-1 border border-pink-200 rounded text-xs resize-none focus:border-pink-400 focus:outline-none"
+                                        placeholder="Write a reply..."
+                                        rows="2"></textarea>
+                                    <div class="flex justify-end mt-1">
+                                        <button class="post-reply-btn bg-pink-500 text-white px-3 py-1 rounded text-xs hover:bg-pink-600 transition-colors" 
+                                                data-confession-id="${comment.confession_id}" 
+                                                data-parent-comment-id="${comment.id}">
+                                            Reply
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Nested Replies -->
+                        ${comment.replies && comment.replies.length > 0 ? renderComments(comment.replies, level + 1) : ''}
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
     
     // Form submission
     confessionForm.addEventListener('submit', function(e) {
@@ -521,7 +810,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const anonymousLetter = confessionData ? confessionData.anonymous_letter : String.fromCharCode(65 + Math.floor(Math.random() * 26));
         const confessionId = confessionData ? confessionData.id : 'temp-' + Date.now();
         const likesCount = confessionData ? (confessionData.likes_count || 0) : 0;
-        const viewsCount = confessionData ? (confessionData.views_count || 0) : 0;
+        
         
         return `
             <div class="confession-card p-6 slide-up" data-category="${category}" data-confession-id="${confessionId}">
@@ -542,9 +831,41 @@ document.addEventListener('DOMContentLoaded', function() {
                         <i class="fas fa-heart"></i>
                         <span>${likesCount}</span>
                     </button>
+                    <button class="comment-btn stat-item" data-confession-id="${confessionId}">
+                        <i class="fas fa-comment"></i>
+                        <span class="comment-count">0</span>
+                    </button>
                     <div class="stat-item">
                         <i class="fas fa-eye"></i>
-                        <span>${viewsCount} views</span>
+                        
+                    </div>
+                </div>
+                
+                <!-- Comments Section -->
+                <div class="comments-section mt-4 hidden" data-confession-id="${confessionId}">
+                    <div class="border-t border-pink-200 pt-4">
+                        <!-- Comment Form -->
+                        <div class="comment-form mb-4">
+                            <div class="flex items-start space-x-3">
+                                <div class="anonymous-avatar w-8 h-8 text-sm">A</div>
+                                <div class="flex-1">
+                                    <textarea 
+                                        class="w-full px-3 py-2 border border-pink-200 rounded-lg resize-none focus:border-pink-400 focus:outline-none text-sm"
+                                        placeholder="Add a comment..."
+                                        rows="2"></textarea>
+                                    <div class="flex justify-end mt-2">
+                                        <button class="post-comment-btn bg-pink-500 text-white px-4 py-1 rounded-full text-sm hover:bg-pink-600 transition-colors" data-confession-id="${confessionId}">
+                                            Comment
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Comments List -->
+                        <div class="comments-list space-y-3">
+                            <!-- Comments will be loaded here -->
+                        </div>
                     </div>
                 </div>
             </div>

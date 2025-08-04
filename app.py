@@ -734,76 +734,87 @@ def like_user(user_id):
     if 'user_id' not in session:
         return redirect(url_for('login'))
     
-    liker_id = session['user_id']
+    current_user_id = session['user_id']
     
-    # Add like (Supabase will handle duplicates)
+    if current_user_id == user_id:
+        flash('You cannot like yourself!', 'error')
+        return redirect(url_for('dashboard'))
+    
     try:
-        supabase.table('likes').insert({'liker_id': liker_id, 'liked_id': user_id}).execute()
+        # Check if already liked
+        existing_like = supabase.table('likes').select('*').eq('liker_id', current_user_id).eq('liked_id', user_id).execute()
         
-        # Get the liked user's info for notification
-        liked_user_result = supabase.table('users').select('name').eq('id', user_id).execute()
-        liked_user_name = liked_user_result.data[0]['name'] if liked_user_result.data else 'Someone'
+        if existing_like.data:
+            flash('You already liked this person!', 'info')
+            return redirect(url_for('dashboard'))
         
-        # Get the liker's info for the notification
-        liker_result = supabase.table('users').select('name').eq('id', liker_id).execute()
-        liker_name = liker_result.data[0]['name'] if liker_result.data else 'Someone'
-        
-        # Create notification for the liked user
-        supabase.table('notifications').insert({
-            'user_id': user_id,
-            'from_user_id': liker_id,
-            'type': 'like',
-            'message': f'{liker_name} liked your profile! 💖'
+        # Add the like
+        supabase.table('likes').insert({
+            'liker_id': current_user_id,
+            'liked_id': user_id
         }).execute()
         
-        flash(f'You liked {liked_user_name}! 💖', 'success')
+        # Check if it's a mutual like (match)
+        mutual_like = supabase.table('likes').select('*').eq('liker_id', user_id).eq('liked_id', current_user_id).execute()
+        
+        if mutual_like.data:
+            # It's a match! Create match record
+            user1_id = min(current_user_id, user_id)
+            user2_id = max(current_user_id, user_id)
+            
+            supabase.table('matches').insert({
+                'user1_id': user1_id,
+                'user2_id': user2_id
+            }).execute()
+            
+            # Get user names
+            current_user_result = supabase.table('users').select('name').eq('id', current_user_id).execute()
+            other_user_result = supabase.table('users').select('name').eq('id', user_id).execute()
+            
+            current_user_name = current_user_result.data[0]['name'] if current_user_result.data else 'Someone'
+            other_user_name = other_user_result.data[0]['name'] if other_user_result.data else 'Someone'
+            
+            # Delete all existing notifications between these users
+            supabase.table('notifications').delete().or_(f'user_id.eq.{current_user_id},from_user_id.eq.{user_id}').execute()
+            supabase.table('notifications').delete().or_(f'user_id.eq.{user_id},from_user_id.eq.{current_user_id}').execute()
+            
+            # Create match notifications
+            supabase.table('notifications').insert([
+                {
+                    'user_id': current_user_id,
+                    'from_user_id': user_id,
+                    'type': 'match',
+                    'message': f'It\'s a match with {other_user_name}! 💕'
+                },
+                {
+                    'user_id': user_id,
+                    'from_user_id': current_user_id,
+                    'type': 'match',
+                    'message': f'It\'s a match with {current_user_name}! 💕'
+                }
+            ]).execute()
+            
+            flash(f'It\'s a match with {other_user_name}! 💕', 'success')
+        else:
+            # Just a like, create notification
+            current_user_result = supabase.table('users').select('name').eq('id', current_user_id).execute()
+            current_user_name = current_user_result.data[0]['name'] if current_user_result.data else 'Someone'
+            
+            # Delete any existing like notifications from this user to avoid duplicates
+            supabase.table('notifications').delete().eq('user_id', user_id).eq('from_user_id', current_user_id).eq('type', 'like').execute()
+            
+            # Create like notification
+            supabase.table('notifications').insert({
+                'user_id': user_id,
+                'from_user_id': current_user_id,
+                'type': 'like',
+                'message': f'{current_user_name} liked your profile! 💖'
+            }).execute()
+            
+            flash('Profile liked! 💖', 'success')
         
     except Exception as e:
-        # Like might already exist, that's okay
-        pass
-    
-            # Check if it's a match
-        existing_like_result = supabase.table('likes').select('*').eq('liker_id', user_id).eq('liked_id', liker_id).execute()
-        
-        if existing_like_result.data:
-            # It's a match!
-            user1_id = min(liker_id, user_id)
-            user2_id = max(liker_id, user_id)
-            
-            try:
-                supabase.table('matches').insert({'user1_id': user1_id, 'user2_id': user2_id}).execute()
-                
-                # Get both users' names for notifications
-                user1_result = supabase.table('users').select('name').eq('id', user1_id).execute()
-                user2_result = supabase.table('users').select('name').eq('id', user2_id).execute()
-                
-                user1_name = user1_result.data[0]['name'] if user1_result.data else 'Someone'
-                user2_name = user2_result.data[0]['name'] if user2_result.data else 'Someone'
-                
-                # Delete older notifications between these users to avoid duplicates
-                supabase.table('notifications').delete().eq('user_id', user1_id).eq('from_user_id', user2_id).execute()
-                supabase.table('notifications').delete().eq('user_id', user2_id).eq('from_user_id', user1_id).execute()
-                
-                # Create match notifications for both users
-                supabase.table('notifications').insert([
-                    {
-                        'user_id': user1_id,
-                        'from_user_id': user2_id,
-                        'type': 'match',
-                        'message': f'It\'s a match with {user2_name}! 💖'
-                    },
-                    {
-                        'user_id': user2_id,
-                        'from_user_id': user1_id,
-                        'type': 'match',
-                        'message': f'It\'s a match with {user1_name}! 💖'
-                    }
-                ]).execute()
-                
-                flash('It\'s a match! 💖', 'success')
-            except Exception as e:
-                # Match might already exist, that's okay
-                pass
+        flash('Error processing like', 'error')
     
     return redirect(url_for('dashboard'))
 
@@ -874,9 +885,15 @@ def matches():
                                 <p class="text-xs text-gray-500">Matched {{ match.matched_at[:10] }}</p>
                             </div>
                             
-                            <a href="{{ url_for('chat', user_id=match.match_id) }}" class="btn-primary text-white px-4 py-2 rounded-lg text-sm">
-                                Chat
-                            </a>
+                            <div class="flex space-x-2">
+                                <a href="{{ url_for('chat', user_id=match.match_id) }}" class="btn-primary text-white px-4 py-2 rounded-lg text-sm">
+                                    Chat
+                                </a>
+                                <button onclick="removeConnection('{{ match.match_id }}', '{{ match.name }}')" 
+                                        class="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-lg text-sm transition-colors">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
                         </div>
                     </div>
                     {% endfor %}
@@ -896,8 +913,194 @@ def matches():
             {% endif %}
         </div>
     </div>
+    
+    <script>
+    function removeConnection(userId, userName) {
+        // Create custom modal
+        const modal = document.createElement('div');
+        modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+        modal.innerHTML = `
+            <div class="bg-white rounded-2xl p-6 mx-4 max-w-sm w-full transform transition-all duration-300 scale-95 opacity-0">
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-exclamation-triangle text-2xl text-red-500"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-gray-800 mb-2">Remove Connection</h3>
+                    <p class="text-gray-600 mb-6">Are you sure you want to remove <span class="font-semibold text-pink-600">${userName}</span> from your connections? This action cannot be undone.</p>
+                    
+                    <div class="flex space-x-3">
+                        <button onclick="closeModal()" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-3 rounded-xl font-semibold transition-colors">
+                            Cancel
+                        </button>
+                        <button onclick="confirmRemove('${userId}', '${userName}')" class="flex-1 bg-red-500 hover:bg-red-600 text-white px-4 py-3 rounded-xl font-semibold transition-colors">
+                            Remove
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // Animate in
+        setTimeout(() => {
+            const dialog = modal.querySelector('.bg-white');
+            dialog.classList.remove('scale-95', 'opacity-0');
+            dialog.classList.add('scale-100', 'opacity-100');
+        }, 10);
+        
+        // Close on backdrop click
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeModal();
+            }
+        });
+        
+        // Close on escape key
+        document.addEventListener('keydown', function escapeHandler(e) {
+            if (e.key === 'Escape') {
+                closeModal();
+                document.removeEventListener('keydown', escapeHandler);
+            }
+        });
+    }
+    
+    function closeModal() {
+        const modal = document.querySelector('.fixed.inset-0.bg-black.bg-opacity-50');
+        if (modal) {
+            const dialog = modal.querySelector('.bg-white');
+            dialog.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                modal.remove();
+            }, 300);
+        }
+    }
+    
+    function confirmRemove(userId, userName) {
+        closeModal();
+        
+        fetch(`/unmatch/${userId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Remove the match card from the UI
+                const matchCard = document.querySelector(`[onclick*="${userId}"]`).closest('.bg-white');
+                matchCard.style.transform = 'translateX(-100%)';
+                matchCard.style.opacity = '0';
+                setTimeout(() => {
+                    matchCard.remove();
+                    // Update the connection count
+                    const countElement = document.querySelector('.text-gray-600');
+                    const currentCount = parseInt(countElement.textContent.split(' ')[0]);
+                    const newCount = currentCount - 1;
+                    countElement.textContent = `${newCount} connection${newCount !== 1 ? 's' : ''}`;
+                    
+                    // Show empty state if no more matches
+                    if (newCount === 0) {
+                        location.reload();
+                    }
+                }, 300);
+                
+                // Show success message
+                showSuccessMessage('Connection removed successfully');
+            } else {
+                showErrorMessage(data.error || 'Failed to remove connection');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showErrorMessage('Network error. Please try again.');
+        });
+    }
+    
+    function showSuccessMessage(message) {
+        const toast = document.createElement('div');
+        toast.className = 'fixed top-24 right-4 z-50 bg-green-500 text-white px-6 py-3 rounded-xl shadow-lg transform translate-x-full transition-transform duration-300';
+        toast.innerHTML = `
+            <div class="flex items-center space-x-2">
+                <i class="fas fa-check-circle"></i>
+                <span>${message}</span>
+            </div>
+        `;
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.classList.remove('translate-x-full');
+        }, 100);
+        
+        setTimeout(() => {
+            toast.classList.add('translate-x-full');
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
+    
+    function showErrorMessage(message) {
+        const toast = document.createElement('div');
+        toast.className = 'fixed top-24 right-4 z-50 bg-red-500 text-white px-6 py-3 rounded-xl shadow-lg transform translate-x-full transition-transform duration-300';
+        toast.innerHTML = `
+            <div class="flex items-center space-x-2">
+                <i class="fas fa-exclamation-circle"></i>
+                <span>${message}</span>
+            </div>
+        `;
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.classList.remove('translate-x-full');
+        }, 100);
+        
+        setTimeout(() => {
+            toast.classList.add('translate-x-full');
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
+    </script>
     {% endblock %}
     ''', matches=user_matches)
+
+@app.route('/unmatch/<user_id>', methods=['POST'])
+def unmatch_user(user_id):
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    current_user_id = session['user_id']
+    
+    try:
+        # Find the match record
+        match_result = supabase.table('matches').select('*').or_(f'user1_id.eq.{current_user_id},user2_id.eq.{current_user_id}').or_(f'user1_id.eq.{user_id},user2_id.eq.{user_id}').execute()
+        
+        if not match_result.data:
+            return jsonify({'error': 'Match not found'}), 404
+        
+        # Delete the match
+        match_id = match_result.data[0]['id']
+        supabase.table('matches').delete().eq('id', match_id).execute()
+        
+        # Delete all notifications between these users
+        supabase.table('notifications').delete().or_(f'user_id.eq.{current_user_id},from_user_id.eq.{user_id}').execute()
+        supabase.table('notifications').delete().or_(f'user_id.eq.{user_id},from_user_id.eq.{current_user_id}').execute()
+        
+        # Also delete any chat requests between these users
+        supabase.table('chat_requests').delete().or_(f'requester_id.eq.{current_user_id},receiver_id.eq.{current_user_id}').or_(f'requester_id.eq.{user_id},receiver_id.eq.{user_id}').execute()
+        
+        # Delete all messages between these users
+        supabase.table('messages').delete().or_(f'sender_id.eq.{current_user_id},receiver_id.eq.{current_user_id}').or_(f'sender_id.eq.{user_id},receiver_id.eq.{user_id}').execute()
+        
+        # Delete likes between these users
+        supabase.table('likes').delete().or_(f'liker_id.eq.{current_user_id},liked_id.eq.{current_user_id}').or_(f'liker_id.eq.{user_id},liked_id.eq.{user_id}').execute()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Connection removed successfully'
+        })
+        
+    except Exception as e:
+        return jsonify({'error': 'Server error'}), 500
 
 @app.route('/profile')
 def profile():
@@ -1122,7 +1325,7 @@ def edit_profile():
                 <div class="bg-white rounded-xl p-6 shadow-sm slide-up">
                     <h3 class="font-semibold text-gray-800 mb-4">About You</h3>
                     <textarea name="bio" rows="4" placeholder="Tell people about yourself..."
-                              class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500">{{ user.bio or '' }}</textarea>
+                              class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500"></textarea>
                 </div>
                 
                 <div class="bg-white rounded-xl p-6 shadow-sm space-y-4 slide-up">
@@ -1253,7 +1456,7 @@ def notifications():
             <div class="space-y-4 mb-8">
                 <h2 class="font-semibold text-gray-800 mb-3">Recent Activity</h2>
                 {% for notification in notifications %}
-                <div class="bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition-all duration-300 slide-up {% if not notification.is_read %}border-l-4 border-red-500{% endif %}">
+                <div class="bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition-all duration-300 slide-up {% if not notification.is_read %}border-l-4 border-red-500{% endif %}" data-notification-id="{{ notification.id }}">
                     <div class="flex items-center space-x-4">
                         <div class="w-12 h-12 bg-gradient-to-br from-pink-200 to-red-200 rounded-full flex items-center justify-center flex-shrink-0">
                             {% if notification.from_user_photo %}
@@ -1276,9 +1479,15 @@ def notifications():
                         </div>
                         
                         {% if notification.type == 'match' %}
-                        <span class="bg-red-500 text-white px-2 py-1 rounded-full text-xs">
-                            Match! 💖
-                        </span>
+                        <div class="flex space-x-2">
+                            <span class="bg-red-500 text-white px-2 py-1 rounded-full text-xs">
+                                Match! 💕
+                            </span>
+                            <button onclick="deleteNotification('{{ notification.id }}')" 
+                                    class="bg-gray-500 hover:bg-gray-600 text-white px-2 py-1 rounded text-xs transition-colors">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
                         {% elif notification.type == 'like' %}
                         <div class="flex space-x-2">
                             <span class="bg-pink-500 text-white px-2 py-1 rounded-full text-xs">
@@ -1286,8 +1495,12 @@ def notifications():
                             </span>
                             <a href="{{ url_for('accept_like_and_chat', user_id=notification.from_user_id) }}" 
                                class="bg-green-500 text-white px-3 py-1 rounded-lg text-xs hover:bg-green-600 transition-colors">
-                                Accept
+                                Match
                             </a>
+                            <button onclick="deleteNotification('{{ notification.id }}')" 
+                                    class="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-xs transition-colors">
+                                <i class="fas fa-times"></i>
+                            </button>
                         </div>
                         {% elif notification.type == 'chat_request' %}
                         <div class="flex space-x-2">
@@ -1298,6 +1511,10 @@ def notifications():
                                class="bg-green-500 text-white px-3 py-1 rounded-lg text-xs hover:bg-green-600 transition-colors">
                                 Accept
                             </a>
+                            <button onclick="deleteNotification('{{ notification.id }}')" 
+                                    class="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-xs transition-colors">
+                                <i class="fas fa-times"></i>
+                            </button>
                         </div>
                         {% elif notification.type == 'chat_accepted' %}
                         <div class="flex space-x-2">
@@ -1308,6 +1525,10 @@ def notifications():
                                class="bg-blue-500 text-white px-3 py-1 rounded-lg text-xs hover:bg-blue-600 transition-colors">
                                 Chat Now
                             </a>
+                            <button onclick="deleteNotification('{{ notification.id }}')" 
+                                    class="bg-gray-500 hover:bg-gray-600 text-white px-2 py-1 rounded text-xs transition-colors">
+                                <i class="fas fa-times"></i>
+                            </button>
                         </div>
                         {% endif %}
                     </div>
@@ -1409,6 +1630,153 @@ def notifications():
             {% endif %}
         </div>
     </div>
+    
+    <script>
+    function deleteNotification(notificationId) {
+        // Create custom modal
+        const modal = document.createElement('div');
+        modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+        modal.innerHTML = `
+            <div class="bg-white rounded-2xl p-6 mx-4 max-w-sm w-full transform transition-all duration-300 scale-95 opacity-0">
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-trash-alt text-2xl text-red-500"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-gray-800 mb-2">Remove Notification</h3>
+                    <p class="text-gray-600 mb-6">Are you sure you want to remove this notification? This action cannot be undone.</p>
+                    
+                    <div class="flex space-x-3">
+                        <button onclick="closeDeleteModal()" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-3 rounded-xl font-semibold transition-colors">
+                            Cancel
+                        </button>
+                        <button onclick="confirmDeleteNotification('${notificationId}')" class="flex-1 bg-red-500 hover:bg-red-600 text-white px-4 py-3 rounded-xl font-semibold transition-colors">
+                            Remove
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // Animate in
+        setTimeout(() => {
+            const dialog = modal.querySelector('.bg-white');
+            dialog.classList.remove('scale-95', 'opacity-0');
+            dialog.classList.add('scale-100', 'opacity-100');
+        }, 10);
+        
+        // Close on backdrop click
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeDeleteModal();
+            }
+        });
+        
+        // Close on escape key
+        document.addEventListener('keydown', function escapeHandler(e) {
+            if (e.key === 'Escape') {
+                closeDeleteModal();
+                document.removeEventListener('keydown', escapeHandler);
+            }
+        });
+    }
+    
+    function closeDeleteModal() {
+        const modal = document.querySelector('.fixed.inset-0.bg-black.bg-opacity-50');
+        if (modal) {
+            const dialog = modal.querySelector('.bg-white');
+            dialog.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                modal.remove();
+            }, 300);
+        }
+    }
+    
+    function confirmDeleteNotification(notificationId) {
+        closeDeleteModal();
+        
+        fetch(`/delete-notification/${notificationId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Remove the notification card from the UI
+                const notificationCard = document.querySelector(`[data-notification-id="${notificationId}"]`);
+                notificationCard.style.transform = 'translateX(-100%)';
+                notificationCard.style.opacity = '0';
+                setTimeout(() => {
+                    notificationCard.remove();
+                    // Update the notification count
+                    const countElement = document.querySelector('.text-gray-600');
+                    const currentCount = parseInt(countElement.textContent.split(' ')[0]);
+                    const newCount = currentCount - 1;
+                    countElement.textContent = `${newCount} new notifications`;
+                    
+                    // Show empty state if no more notifications
+                    if (newCount === 0 && document.querySelectorAll('.bg-white.rounded-xl').length === 0) {
+                        location.reload();
+                    }
+                }, 300);
+                
+                // Show success message
+                showSuccessMessage('Notification removed successfully');
+            } else {
+                showErrorMessage(data.error || 'Failed to remove notification');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showErrorMessage('Network error. Please try again.');
+        });
+    }
+    
+    function showSuccessMessage(message) {
+        const toast = document.createElement('div');
+        toast.className = 'fixed top-24 right-4 z-50 bg-green-500 text-white px-6 py-3 rounded-xl shadow-lg transform translate-x-full transition-transform duration-300';
+        toast.innerHTML = `
+            <div class="flex items-center space-x-2">
+                <i class="fas fa-check-circle"></i>
+                <span>${message}</span>
+            </div>
+        `;
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.classList.remove('translate-x-full');
+        }, 100);
+        
+        setTimeout(() => {
+            toast.classList.add('translate-x-full');
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
+    
+    function showErrorMessage(message) {
+        const toast = document.createElement('div');
+        toast.className = 'fixed top-24 right-4 z-50 bg-red-500 text-white px-6 py-3 rounded-xl shadow-lg transform translate-x-full transition-transform duration-300';
+        toast.innerHTML = `
+            <div class="flex items-center space-x-2">
+                <i class="fas fa-exclamation-circle"></i>
+                <span>${message}</span>
+            </div>
+        `;
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.classList.remove('translate-x-full');
+        }, 100);
+        
+        setTimeout(() => {
+            toast.classList.add('translate-x-full');
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
+    </script>
     {% endblock %}
     ''', pending_requests=pending_requests, recent_matches=recent_matches, notifications=notifications)
 
@@ -1473,17 +1841,33 @@ def reject_chat_request(request_id):
     if 'user_id' not in session:
         return redirect(url_for('login'))
     
-    user_id = session['user_id']
+    current_user_id = session['user_id']
     
     try:
-        supabase.table('chat_requests').update({
-            'status': 'rejected',
-            'updated_at': datetime.now().isoformat()
-        }).eq('id', request_id).eq('receiver_id', user_id).execute()
+        # Get the chat request details
+        request_result = supabase.table('chat_requests').select('*').eq('id', request_id).execute()
+        if not request_result.data:
+            flash('Chat request not found', 'error')
+            return redirect(url_for('notifications'))
         
-        flash('Chat request rejected', 'info')
+        chat_request = request_result.data[0]
+        
+        # Make sure the current user is the receiver
+        if chat_request['receiver_id'] != current_user_id:
+            flash('Unauthorized', 'error')
+            return redirect(url_for('notifications'))
+        
+        # Delete the chat request
+        supabase.table('chat_requests').delete().eq('id', request_id).execute()
+        
+        # Delete all notifications between these users related to this chat request
+        supabase.table('notifications').delete().eq('user_id', current_user_id).eq('from_user_id', chat_request['requester_id']).eq('type', 'chat_request').execute()
+        supabase.table('notifications').delete().eq('user_id', chat_request['requester_id']).eq('from_user_id', current_user_id).eq('type', 'chat_request').execute()
+        
+        flash('Chat request rejected', 'success')
+        
     except Exception as e:
-        flash('Error rejecting request', 'error')
+        flash('Error rejecting chat request', 'error')
     
     return redirect(url_for('notifications'))
 
@@ -2255,51 +2639,40 @@ def accept_like_and_chat(user_id):
     
     current_user_id = session['user_id']
     
-    # Create a match between the two users
-    user1_id = min(current_user_id, user_id)
-    user2_id = max(current_user_id, user_id)
-    
     try:
         # Create match
-        supabase.table('matches').insert({'user1_id': user1_id, 'user2_id': user2_id}).execute()
+        supabase.table('matches').insert({
+            'user1_id': current_user_id,
+            'user2_id': user_id
+        }).execute()
         
-        # Get user names for notifications
-        user1_result = supabase.table('users').select('name').eq('id', user1_id).execute()
-        user2_result = supabase.table('users').select('name').eq('id', user2_id).execute()
+        # Delete any existing chat requests
+        supabase.table('chat_requests').delete().eq('requester_id', user_id).eq('receiver_id', current_user_id).execute()
+        supabase.table('chat_requests').delete().eq('requester_id', current_user_id).eq('receiver_id', user_id).execute()
         
-        user1_name = user1_result.data[0]['name'] if user1_result.data else 'Someone'
-        user2_name = user2_result.data[0]['name'] if user2_result.data else 'Someone'
+        # Delete all notifications between these users (like notifications, chat request notifications, etc.)
+        supabase.table('notifications').delete().or_(f'user_id.eq.{current_user_id},from_user_id.eq.{user_id}').execute()
+        supabase.table('notifications').delete().or_(f'user_id.eq.{user_id},from_user_id.eq.{current_user_id}').execute()
         
-        # Delete older notifications from the same users to avoid duplicates
-        # Delete notifications where user1 received notifications from user2
-        supabase.table('notifications').delete().eq('user_id', user1_id).eq('from_user_id', user2_id).execute()
+        # Get user names for notification
+        user_result = supabase.table('users').select('name').eq('id', user_id).execute()
+        user_name = user_result.data[0]['name'] if user_result.data else 'Someone'
         
-        # Delete notifications where user2 received notifications from user1
-        supabase.table('notifications').delete().eq('user_id', user2_id).eq('from_user_id', user1_id).execute()
+        # Create new notification for the other person about the match
+        supabase.table('notifications').insert({
+            'user_id': user_id,
+            'from_user_id': current_user_id,
+            'type': 'match',
+            'message': f'You matched with {user_name}! 💕'
+        }).execute()
         
-        # Create match notifications for both users
-        supabase.table('notifications').insert([
-            {
-                'user_id': user1_id,
-                'from_user_id': user2_id,
-                'type': 'match',
-                'message': f'It\'s a match with {user2_name}! 💖'
-            },
-            {
-                'user_id': user2_id,
-                'from_user_id': user1_id,
-                'type': 'match',
-                'message': f'It\'s a match with {user1_name}! 💖'
-            }
-        ]).execute()
-        
-        flash('It\'s a match! 💖 You can now chat!', 'success')
+        flash('It\'s a match! You can now chat! 💕', 'success')
         
     except Exception as e:
         # Match might already exist, that's okay
         pass
     
-    # Redirect to chat with the person who liked you
+    # Redirect to chat with the person
     return redirect(url_for('chat', user_id=user_id))
 
 @app.route('/accept-chat-and-start-chat/<user_id>')
@@ -2309,26 +2682,17 @@ def accept_chat_and_start_chat(user_id):
     
     current_user_id = session['user_id']
     
-    # Update any pending chat requests to accepted
     try:
-        supabase.table('chat_requests').update({
-            'status': 'accepted',
-            'updated_at': datetime.now().isoformat()
-        }).or_(f'requester_id.eq.{current_user_id},receiver_id.eq.{current_user_id}').or_(f'requester_id.eq.{user_id},receiver_id.eq.{user_id}').eq('status', 'pending').execute()
+        # Update chat request status to accepted
+        supabase.table('chat_requests').update({'status': 'accepted'}).eq('requester_id', user_id).eq('receiver_id', current_user_id).execute()
         
-        # Create a match if it doesn't exist
-        user1_id = min(current_user_id, user_id)
-        user2_id = max(current_user_id, user_id)
-        
-        supabase.table('matches').insert({'user1_id': user1_id, 'user2_id': user2_id}).execute()
+        # Delete all notifications between these users (chat request notifications, etc.)
+        supabase.table('notifications').delete().or_(f'user_id.eq.{current_user_id},from_user_id.eq.{user_id}').execute()
+        supabase.table('notifications').delete().or_(f'user_id.eq.{user_id},from_user_id.eq.{current_user_id}').execute()
         
         # Get user names for notification
         requester_result = supabase.table('users').select('name').eq('id', user_id).execute()
         requester_name = requester_result.data[0]['name'] if requester_result.data else 'Someone'
-        
-        # Delete older notifications between these users to avoid duplicates
-        supabase.table('notifications').delete().eq('user_id', user_id).eq('from_user_id', current_user_id).execute()
-        supabase.table('notifications').delete().eq('user_id', current_user_id).eq('from_user_id', user_id).execute()
         
         # Create notification for the other person
         supabase.table('notifications').insert({
@@ -2479,8 +2843,7 @@ def post_confession():
     if not content:
         return jsonify({'error': 'Confession content is required'}), 400
     
-    if len(content) > 500:
-        return jsonify({'error': 'Confession is too long (max 500 characters)'}), 400
+    # Removed character limit - allow longer confessions
     
     # Valid categories
     valid_categories = ['crush', 'missed', 'confession', 'rant', 'appreciation', 'advice']
@@ -2502,6 +2865,7 @@ def post_confession():
             confession = result.data[0]
             confession['anonymous_letter'] = chr(65 + (hash(confession['id']) % 26))
             confession['user_liked'] = False
+            confession['time_ago'] = time_ago(confession['created_at'])
             
             return jsonify({
                 'success': True,
@@ -2510,6 +2874,143 @@ def post_confession():
             })
         else:
             return jsonify({'error': 'Failed to post confession'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': 'Server error'}), 500
+
+@app.route('/post-comment', methods=['POST'])
+def post_comment():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    current_user_id = session['user_id']
+    confession_id = request.form.get('confession_id')
+    parent_comment_id = request.form.get('parent_comment_id')  # For nested replies
+    content = request.form.get('content', '').strip()
+    
+    if not content:
+        return jsonify({'error': 'Comment content is required'}), 400
+    
+    if not confession_id:
+        return jsonify({'error': 'Confession ID is required'}), 400
+    
+    try:
+        # Insert comment
+        comment_data = {
+            'confession_id': confession_id,
+            'user_id': current_user_id,
+            'content': content,
+            'likes_count': 0,
+            'is_approved': True
+        }
+        
+        if parent_comment_id:
+            comment_data['parent_comment_id'] = parent_comment_id
+        
+        result = supabase.table('confession_comments').insert(comment_data).execute()
+        
+        if result.data:
+            comment = result.data[0]
+            comment['anonymous_letter'] = chr(65 + (hash(comment['id']) % 26))
+            comment['user_liked'] = False
+            comment['time_ago'] = time_ago(comment['created_at'])
+            
+            return jsonify({
+                'success': True,
+                'comment': comment,
+                'message': 'Comment posted successfully!'
+            })
+        else:
+            return jsonify({'error': 'Failed to post comment'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': 'Server error'}), 500
+
+@app.route('/get-comments/<confession_id>')
+def get_comments(confession_id):
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    current_user_id = session['user_id']
+    
+    try:
+        # Get all comments for this confession
+        result = supabase.table('confession_comments').select('*').eq('confession_id', confession_id).eq('is_approved', True).order('created_at', desc=True).execute()
+        comments = result.data if result.data else []
+        
+        # Get user's liked comments
+        user_likes_result = supabase.table('comment_likes').select('comment_id').eq('user_id', current_user_id).execute()
+        user_liked_comment_ids = {like['comment_id'] for like in user_likes_result.data} if user_likes_result.data else set()
+        
+        # Process comments
+        for comment in comments:
+            comment['user_liked'] = comment['id'] in user_liked_comment_ids
+            comment['anonymous_letter'] = chr(65 + (hash(comment['id']) % 26))
+            comment['time_ago'] = time_ago(comment['created_at'])
+        
+        # Organize comments into a tree structure (parent-child)
+        comment_tree = []
+        comment_dict = {comment['id']: comment for comment in comments}
+        
+        for comment in comments:
+            if not comment.get('parent_comment_id'):
+                # Top-level comment
+                comment['replies'] = []
+                comment_tree.append(comment)
+            else:
+                # Reply to another comment
+                parent = comment_dict.get(comment['parent_comment_id'])
+                if parent:
+                    if 'replies' not in parent:
+                        parent['replies'] = []
+                    parent['replies'].append(comment)
+        
+        return jsonify({
+            'success': True,
+            'comments': comment_tree
+        })
+        
+    except Exception as e:
+        return jsonify({'error': 'Server error'}), 500
+
+@app.route('/like-comment/<comment_id>', methods=['POST'])
+def like_comment(comment_id):
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    current_user_id = session['user_id']
+    
+    try:
+        # Check if user already liked this comment
+        existing_like = supabase.table('comment_likes').select('*').eq('comment_id', comment_id).eq('user_id', current_user_id).execute()
+        
+        if existing_like.data:
+            # Unlike - remove the like
+            supabase.table('comment_likes').delete().eq('comment_id', comment_id).eq('user_id', current_user_id).execute()
+            
+            # Decrease likes count
+            supabase.table('confession_comments').update({'likes_count': supabase.table('confession_comments').select('likes_count').eq('id', comment_id).execute().data[0]['likes_count'] - 1}).eq('id', comment_id).execute()
+            
+            return jsonify({
+                'success': True,
+                'liked': False,
+                'message': 'Comment unliked'
+            })
+        else:
+            # Like - add the like
+            supabase.table('comment_likes').insert({
+                'comment_id': comment_id,
+                'user_id': current_user_id
+            }).execute()
+            
+            # Increase likes count
+            supabase.table('confession_comments').update({'likes_count': supabase.table('confession_comments').select('likes_count').eq('id', comment_id).execute().data[0]['likes_count'] + 1}).eq('id', comment_id).execute()
+            
+            return jsonify({
+                'success': True,
+                'liked': True,
+                'message': 'Comment liked'
+            })
             
     except Exception as e:
         return jsonify({'error': 'Server error'}), 500
@@ -2602,6 +3103,28 @@ def get_confessions():
         'confessions': confessions,
         'has_more': len(confessions) == limit
     })
+
+@app.route('/delete-notification/<notification_id>', methods=['POST'])
+def delete_notification(notification_id):
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    current_user_id = session['user_id']
+    
+    try:
+        # Delete the notification (only if it belongs to the current user)
+        result = supabase.table('notifications').delete().eq('id', notification_id).eq('user_id', current_user_id).execute()
+        
+        if result.data:
+            return jsonify({
+                'success': True,
+                'message': 'Notification removed successfully'
+            })
+        else:
+            return jsonify({'error': 'Notification not found or unauthorized'}), 404
+        
+    except Exception as e:
+        return jsonify({'error': 'Server error'}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8000)
