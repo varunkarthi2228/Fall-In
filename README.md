@@ -61,7 +61,18 @@ A modern Flask-based dating application designed for university students to conn
    # Edit .env with your Supabase credentials
    ```
 
-5. **Run the application**
+5. **Set up Supabase (Required)**
+   - Go to [supabase.com](https://supabase.com) and create a new project
+   - Get your project URL and anon key from Settings > API
+   - Update the `.env` file with your credentials
+   - Run the SQL schema in your Supabase SQL editor (copy from `supabase_schema.sql`)
+
+6. **Test the setup**
+   ```bash
+   python setup.py
+   ```
+
+7. **Run the application**
    ```bash
    python app.py
    ```
@@ -212,6 +223,36 @@ source venv/bin/activate
 
 ### Database Issues
 The database is created automatically when you first run the app. If you need to reset it, simply delete `fall_in.db` and restart the application.
+
+### Supabase Connection Issues
+If you see "nodename nor servname provided, or not known" errors:
+
+1. **Check your .env file:**
+   ```bash
+   python setup.py
+   ```
+
+2. **Verify Supabase credentials:**
+   - Make sure your SUPABASE_URL starts with `https://`
+   - Ensure your SUPABASE_KEY is the anon key (not service role key)
+   - Check that your Supabase project is active
+
+3. **Test connection manually:**
+   ```bash
+   python -c "
+   from supabase import create_client
+   import os
+   from dotenv import load_dotenv
+   load_dotenv()
+   supabase = create_client(os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_KEY'))
+   result = supabase.table('users').select('count', count='exact').limit(1).execute()
+   print('Connection successful!')
+   "
+   ```
+
+4. **Check database schema:**
+   - Make sure you've run the SQL from `supabase_schema.sql` in your Supabase SQL editor
+   - Verify that the `users` table exists
 
 ## License
 

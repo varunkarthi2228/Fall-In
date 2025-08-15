@@ -172,84 +172,19 @@ def image_to_base64(image_file):
         return None
 
 # Debug and Test Routes
-@app.route('/debug')
-def debug():
-    """Debug page to check if everything is working"""
-    return render_template_string('''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Fall In - Debug</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    </head>
-    <body class="bg-gray-100 p-8">
-        <div class="max-w-md mx-auto bg-white rounded-xl p-6 shadow-lg">
-            <h1 class="text-2xl font-bold text-red-500 mb-4">
-                <i class="fas fa-heart"></i> Fall In Debug
-            </h1>
-            
-            <div class="space-y-4">
-                <div class="p-4 bg-green-50 rounded-lg">
-                    <h3 class="font-semibold text-green-800">✅ Tailwind CSS Working</h3>
-                    <p class="text-green-600">If you see green styling, Tailwind is loaded!</p>
-                </div>
-                
-                <div class="p-4 bg-blue-50 rounded-lg">
-                    <h3 class="font-semibold text-blue-800">🔧 Font Awesome Working</h3>
-                    <p class="text-blue-600">Icons: <i class="fas fa-heart text-red-500"></i> <i class="fas fa-user"></i> <i class="fas fa-home"></i></p>
-                </div>
-                
-                <div class="p-4 bg-purple-50 rounded-lg">
-                    <h3 class="font-semibold text-purple-800">🗄️ Database Status</h3>
-                    <p class="text-purple-600">Database initialized and ready!</p>
-                </div>
-                
-                <div class="space-y-2">
-                    <a href="{{ url_for('index') }}" class="block bg-red-500 text-white text-center py-3 rounded-lg hover:bg-red-600 transition-colors">
-                        Go to Home Page
-                    </a>
-                    <a href="{{ url_for('test_data') }}" class="block bg-blue-500 text-white text-center py-3 rounded-lg hover:bg-blue-600 transition-colors">
-                        Add Test Data
-                    </a>
-                    <a href="{{ url_for('quick_login') }}" class="block bg-green-500 text-white text-center py-3 rounded-lg hover:bg-green-600 transition-colors">
-                        Quick Login (Skip OTP)
-                    </a>
-                </div>
-            </div>
-        </div>
-    </body>
-    </html>
-    ''')
-
-@app.route('/test-data')
-def test_data():
-    """Add sample data for testing"""
-    add_sample_data()
-    flash('✅ Sample data added! You can now test the app.', 'success')
-    return redirect(url_for('debug'))
 
 
 
 
 
-@app.route('/quick-login')
-def quick_login():
-    """Quick login for testing (skips OTP)"""
-    user_result = supabase.table('users').select('*').eq('email', 'alice@example.com').execute()
-    
-    if user_result.data:
-        user = user_result.data[0]
-        session['user_id'] = user['id']
-        flash('✅ Logged in as Alice for testing!', 'success')
-        return redirect(url_for('dashboard'))
-    else:
-        flash('❌ No test user found. Add test data first.', 'error')
-        return redirect(url_for('debug'))
 
 # Main Routes
 @app.route('/')
 def index():
+    # Check if Supabase is configured
+    if not supabase:
+        return redirect(url_for('setup'))
+    
     if 'user_id' in session:
         return redirect(url_for('dashboard'))
     return render_template_string('''
@@ -272,9 +207,7 @@ def index():
                 <a href="{{ url_for('login') }}" class="block w-full border-2 border-red-500 text-red-500 py-4 rounded-xl font-semibold text-lg hover:bg-red-50 transition duration-300">
                     Sign In
                 </a>
-                <a href="{{ url_for('debug') }}" class="block w-full border border-gray-300 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50 transition duration-300">
-                    🔧 Debug Page
-                </a>
+                
             </div>
         </div>
     </div>
@@ -283,11 +216,19 @@ def index():
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
+    # Check if Supabase is configured
+    if not supabase:
+        return redirect(url_for('setup'))
+    
     if request.method == 'POST':
         email = request.form['email'].lower().strip()
         
-        # Check if user already exists
-        existing_user_result = supabase.table('users').select('*').eq('email', email).execute()
+        try:
+            # Check if user already exists
+            existing_user_result = supabase.table('users').select('*').eq('email', email).execute()
+        except Exception as e:
+            flash(f'Database connection error: {str(e)}. Please check your configuration.', 'error')
+            return render_template('signup.html')
         
         if existing_user_result.data:
             # If user exists, redirect them to login instead of showing error
@@ -345,9 +286,7 @@ def signup():
                 <p class="text-gray-600">Already have an account? 
                     <a href="{{ url_for('login') }}" class="text-red-500 font-semibold hover:underline">Sign In</a>
                 </p>
-                <p class="text-gray-500 text-xs mt-2">
-                    For testing: <a href="{{ url_for('debug') }}" class="text-blue-500 hover:underline">Debug Page</a>
-                </p>
+                
             </div>
         </div>
     </div>
@@ -389,7 +328,7 @@ def verify_otp():
                 </div>
                 <h1 class="text-2xl font-bold text-gray-800">Check Your Email</h1>
                 <p class="text-gray-600 mt-2">We sent a 6-digit code to {{ session.signup_email }}</p>
-                <p class="text-xs text-blue-500 mt-2">Check the console/terminal for the OTP code</p>
+               
             </div>
             
             <form method="POST" class="space-y-6">
@@ -418,11 +357,55 @@ def verify_otp():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    # Check if Supabase is configured
+    if not supabase:
+        return redirect(url_for('setup'))
+    
     if request.method == 'POST':
         email = request.form['email'].lower().strip()
         
-        # Find user by email
-        user_result = supabase.table('users').select('*').eq('email', email).execute()
+        try:
+            # Find user by email
+            user_result = supabase.table('users').select('*').eq('email', email).execute()
+        except Exception as e:
+            flash(f'Database connection error: {str(e)}. Please check your configuration.', 'error')
+            return render_template_string('''
+            {% extends "base.html" %}
+            {% block content %}
+            <div class="heart-bg min-h-screen flex items-center justify-center px-4">
+                <div class="bg-white rounded-2xl p-8 w-full max-w-md shadow-xl slide-up">
+                    <div class="text-center mb-8">
+                        <div class="w-16 h-16 bg-gradient-to-br from-pink-200 to-red-200 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <i class="fas fa-heart text-3xl text-red-500"></i>
+                        </div>
+                        <h1 class="text-2xl font-bold text-gray-800">Welcome Back</h1>
+                        <p class="text-gray-600 mt-2">Enter your email to sign in</p>
+                    </div>
+                    
+                    <form method="POST" class="space-y-6">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
+                            <input type="email" name="email" required 
+                                   class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                   placeholder="yourname@example.com">
+                            <p class="text-xs text-gray-500 mt-1">We'll send a verification code to this email</p>
+                        </div>
+                        
+                        <button type="submit" 
+                                class="w-full btn-primary text-white py-3 rounded-xl font-semibold">
+                            Send Login Code
+                        </button>
+                    </form>
+                    
+                    <div class="text-center mt-6">
+                        <p class="text-gray-600">Don't have an account? 
+                            <a href="{{ url_for('signup') }}" class="text-red-500 font-semibold hover:underline">Sign Up</a>
+                        </p>
+                    </div>
+                </div>
+            </div>
+            {% endblock %}
+            ''')
         
         if user_result.data:
             user = user_result.data[0]
@@ -482,6 +465,10 @@ def login():
 
 @app.route('/verify-login-otp', methods=['GET', 'POST'])
 def verify_login_otp():
+    # Check if Supabase is configured
+    if not supabase:
+        return redirect(url_for('setup'))
+    
     if 'login_email' not in session:
         return redirect(url_for('login'))
     
@@ -489,8 +476,12 @@ def verify_login_otp():
         otp = request.form['otp']
         email = session['login_email']
         
-        # Find user with matching email, OTP, and non-expired OTP
-        user_result = supabase.table('users').select('*').eq('email', email).eq('otp_code', otp).gt('otp_expires', datetime.now().isoformat()).execute()
+        try:
+            # Find user with matching email, OTP, and non-expired OTP
+            user_result = supabase.table('users').select('*').eq('email', email).eq('otp_code', otp).gt('otp_expires', datetime.now().isoformat()).execute()
+        except Exception as e:
+            flash(f'Database connection error: {str(e)}. Please check your configuration.', 'error')
+            return redirect(url_for('login'))
         
         if user_result.data:
             user = user_result.data[0]
@@ -688,51 +679,69 @@ def dashboard():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     
-    # Get user data
-    user_result = supabase.table('users').select('*').eq('id', session['user_id']).execute()
-    if not user_result.data:
-        return redirect(url_for('login'))
+    # Check if Supabase is configured
+    if not supabase:
+        flash('Database not configured. Please set up Supabase credentials in .env file.', 'error')
+        return render_template('dashboard.html', user=None, potential_matches=[])
+    
+    try:
+        # Get user data
+        user_result = supabase.table('users').select('*').eq('id', session['user_id']).execute()
+        if not user_result.data:
+            return redirect(url_for('login'))
+    except Exception as e:
+        flash(f'Database connection error: {str(e)}. Please check your Supabase configuration.', 'error')
+        return render_template('dashboard.html', user=None, potential_matches=[])
     
     user = user_result.data[0]
     
     if not user['name']:
         return redirect(url_for('create_profile'))
     
-    # Get potential matches - users who haven't been liked by current user
-    # and aren't already matched
-    user_id = session['user_id']
-    
-    # Get users the current user has already liked
-    liked_users_result = supabase.table('likes').select('liked_id').eq('liker_id', user_id).execute()
-    liked_user_ids = [like['liked_id'] for like in liked_users_result.data]
-    
-    # Get users who have already matched with current user
-    matches_result = supabase.table('matches').select('user1_id, user2_id').or_(f'user1_id.eq.{user_id},user2_id.eq.{user_id}').execute()
-    matched_user_ids = []
-    for match in matches_result.data:
-        if match['user1_id'] == user_id:
-            matched_user_ids.append(match['user2_id'])
-        else:
-            matched_user_ids.append(match['user1_id'])
-    
-    # Get potential matches
-    excluded_ids = [user_id] + liked_user_ids + matched_user_ids
-    potential_matches_result = supabase.table('users').select('*').neq('id', user_id).not_.in_('id', excluded_ids).not_.is_('name', 'null').limit(10).execute()
-    
-    # Get prompts for each potential match
-    potential_matches = []
-    for match in potential_matches_result.data:
-        prompts_result = supabase.table('user_prompts').select('prompt_question, prompt_answer').eq('user_id', match['id']).execute()
-        prompts_text = ' | '.join([f"{p['prompt_question']}: {p['prompt_answer']}" for p in prompts_result.data])
-        match['prompts'] = prompts_text
-        potential_matches.append(match)
-    
-    return render_template('dashboard.html', user=user, potential_matches=potential_matches)
+    try:
+        # Get potential matches - users who haven't been liked by current user
+        # and aren't already matched
+        user_id = session['user_id']
+        
+        # Get users the current user has already liked
+        liked_users_result = supabase.table('likes').select('liked_id').eq('liker_id', user_id).execute()
+        liked_user_ids = [like['liked_id'] for like in liked_users_result.data]
+        
+        # Get users who have already matched with current user
+        matches_result = supabase.table('matches').select('user1_id, user2_id').or_(f'user1_id.eq.{user_id},user2_id.eq.{user_id}').execute()
+        matched_user_ids = []
+        for match in matches_result.data:
+            if match['user1_id'] == user_id:
+                matched_user_ids.append(match['user2_id'])
+            else:
+                matched_user_ids.append(match['user1_id'])
+        
+        # Get potential matches
+        excluded_ids = [user_id] + liked_user_ids + matched_user_ids
+        potential_matches_result = supabase.table('users').select('*').neq('id', user_id).not_.in_('id', excluded_ids).not_.is_('name', 'null').limit(10).execute()
+        
+        # Get prompts for each potential match
+        potential_matches = []
+        for match in potential_matches_result.data:
+            prompts_result = supabase.table('user_prompts').select('prompt_question, prompt_answer').eq('user_id', match['id']).execute()
+            prompts_text = ' | '.join([f"{p['prompt_question']}: {p['prompt_answer']}" for p in prompts_result.data])
+            match['prompts'] = prompts_text
+            potential_matches.append(match)
+        
+        return render_template('dashboard.html', user=user, potential_matches=potential_matches)
+    except Exception as e:
+        flash(f'Error loading dashboard: {str(e)}', 'error')
+        return render_template('dashboard.html', user=user, potential_matches=[])
 
 @app.route('/like/<user_id>')
 def like_user(user_id):
     if 'user_id' not in session:
         return redirect(url_for('login'))
+    
+    # Check if Supabase is configured
+    if not supabase:
+        flash('Database not configured. Please set up Supabase credentials in .env file.', 'error')
+        return redirect(url_for('dashboard'))
     
     current_user_id = session['user_id']
     
@@ -830,26 +839,35 @@ def matches():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     
+    # Check if Supabase is configured
+    if not supabase:
+        flash('Database not configured. Please set up Supabase credentials in .env file.', 'error')
+        return render_template('chat_list.html', matches=[])
+    
     user_id = session['user_id']
     
-    # Get matches for the current user
-    matches_result = supabase.table('matches').select('*').or_(f'user1_id.eq.{user_id},user2_id.eq.{user_id}').execute()
-    
-    user_matches = []
-    for match in matches_result.data:
-        # Determine the other user's ID
-        other_user_id = match['user2_id'] if match['user1_id'] == user_id else match['user1_id']
+    try:
+        # Get matches for the current user
+        matches_result = supabase.table('matches').select('*').or_(f'user1_id.eq.{user_id},user2_id.eq.{user_id}').execute()
         
-        # Get the other user's details
-        user_result = supabase.table('users').select('*').eq('id', other_user_id).execute()
-        if user_result.data:
-            user_data = user_result.data[0]
-            user_data['matched_at'] = match['matched_at']
-            user_data['match_id'] = other_user_id
-            user_matches.append(user_data)
-    
-    # Sort by matched_at descending
-    user_matches.sort(key=lambda x: x['matched_at'], reverse=True)
+        user_matches = []
+        for match in matches_result.data:
+            # Determine the other user's ID
+            other_user_id = match['user2_id'] if match['user1_id'] == user_id else match['user1_id']
+            
+            # Get the other user's details
+            user_result = supabase.table('users').select('*').eq('id', other_user_id).execute()
+            if user_result.data:
+                user_data = user_result.data[0]
+                user_data['matched_at'] = match['matched_at']
+                user_data['match_id'] = other_user_id
+                user_matches.append(user_data)
+        
+        # Sort by matched_at descending
+        user_matches.sort(key=lambda x: x['matched_at'], reverse=True)
+    except Exception as e:
+        flash(f'Error loading matches: {str(e)}', 'error')
+        user_matches = []
     return render_template_string('''
     {% extends "base.html" %}
     {% block content %}
@@ -3125,6 +3143,59 @@ def delete_notification(notification_id):
         
     except Exception as e:
         return jsonify({'error': 'Server error'}), 500
+
+@app.route('/setup')
+def setup():
+    """Setup page to help users configure the application"""
+    return render_template_string('''
+    {% extends "base.html" %}
+    {% block content %}
+    <div class="bg-gray-50 min-h-screen py-8">
+        <div class="max-w-2xl mx-auto px-4">
+            <div class="bg-white rounded-2xl shadow-lg p-8">
+                <div class="text-center mb-8">
+                    <h1 class="text-3xl font-bold text-gray-800 mb-4">Setup Required</h1>
+                    <p class="text-gray-600">Your Fall In app needs to be configured before you can use it.</p>
+                </div>
+                
+                <div class="space-y-6">
+                    <div class="border-l-4 border-blue-500 pl-4">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-2">1. Create a .env file</h3>
+                        <p class="text-gray-600 mb-2">Copy the env_template.txt file to .env in your project root:</p>
+                        <code class="bg-gray-100 p-2 rounded text-sm block">cp env_template.txt .env</code>
+                    </div>
+                    
+                    <div class="border-l-4 border-green-500 pl-4">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-2">2. Set up Supabase</h3>
+                        <ol class="text-gray-600 space-y-1 ml-4">
+                            <li>• Go to <a href="https://supabase.com" target="_blank" class="text-blue-500 hover:underline">supabase.com</a> and create a new project</li>
+                            <li>• Get your project URL and anon key from Settings > API</li>
+                            <li>• Update the .env file with your credentials</li>
+                        </ol>
+                    </div>
+                    
+                    <div class="border-l-4 border-purple-500 pl-4">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-2">3. Set up the database</h3>
+                        <p class="text-gray-600 mb-2">Run the SQL schema in your Supabase SQL editor:</p>
+                        <code class="bg-gray-100 p-2 rounded text-sm block">Copy and paste the contents of supabase_schema.sql</code>
+                    </div>
+                    
+                    <div class="border-l-4 border-yellow-500 pl-4">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-2">4. Restart the application</h3>
+                        <p class="text-gray-600">After configuring everything, restart your Flask application.</p>
+                    </div>
+                </div>
+                
+                <div class="mt-8 text-center">
+                    <a href="{{ url_for('index') }}" class="btn-primary text-white px-6 py-3 rounded-xl font-semibold">
+                        Go to Home
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endblock %}
+    ''')
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8000)
