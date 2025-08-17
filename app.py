@@ -508,7 +508,7 @@ def verify_login_otp():
                 </div>
                 <h1 class="text-2xl font-bold text-gray-800">Enter Login Code</h1>
                 <p class="text-gray-600 mt-2">We sent a code to {{ session.login_email }}</p>
-                <p class="text-xs text-blue-500 mt-2">Check the console/terminal for the OTP code</p>
+               
             </div>
             
             <form method="POST" class="space-y-6">
